@@ -588,7 +588,7 @@
         }
     };
 
-  async function navigate(dir) {
+ async function navigate(dir) {
     const nameInput = document.getElementById('name');
 
     if (currentStep === 1 && dir === 1 && !nameInput?.value) {
@@ -600,6 +600,21 @@
         startAnalysisSequence();
         return;
     }
+
+    const prev = document.getElementById(`p${currentStep === 7 ? 'Result' : currentStep}`);
+    prev.classList.remove('active');
+
+    currentStep += dir;
+
+    const next = document.getElementById(`p${currentStep}`);
+    next.classList.add('active');
+
+    document.getElementById('backBtn').style.display = currentStep === 1 ? 'none' : 'block';
+
+    const lang = localStorage.getItem('app_lang') || 'en';
+    document.getElementById('nextBtn').innerText =
+        currentStep === 6 ? TRANSLATIONS[lang].btn_analyze : TRANSLATIONS[lang].btn_next;
+}
 
     const prevId = `p${currentStep === 7 ? 'Result' : currentStep}`;
     const prevEl = document.getElementById(prevId);
