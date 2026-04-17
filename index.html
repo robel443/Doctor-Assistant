@@ -735,86 +735,73 @@
         if(data.symptoms["diarrhea"]) cScores["Typhoid"] += 0.25 * data.symptoms["diarrhea"];
 
         if(bpSys < 90 || bpDia < 60) cScores["Hypotension"] += 0.70; 
-        if(data.symptoms["dizziness"]) cScores["Hypotension"] += 0.30 * data.symptoms["dizziness"];
+if (data.symptoms["dizziness"]) {
+    cScores["Hypotension"] += 0.30 * data.symptoms["dizziness"];
+}
 
-        Object.keys(cScores).forEach(k => cScores[k] = Math.min(cScores[k], 1.0));
-        return cScores;
+// clamp scores safely
+Object.keys(cScores).forEach(k => {
+    cScores[k] = Math.min(Math.max(cScores[k] || 0, 0), 1.0);
+});
+
+return cScores;
+}
+
+function resolveDiagnostic(data, imagePreds, hasImage) {
+    let sympCount = Object.keys(data.symptoms || {}).length;
+    let cScores = calculateClinicalScores(data);
+
+    let isNormalBP = (data.bp || "").includes("120/80");
+
+    if (!hasImage && sympCount === 0 && (data.temp || 36.6) < 37.5 && isNormalBP) {
+        return { disease: "INSUFFICIENT DATA", score: 0, status: "No Data" };
     }
 
-    function resolveDiagnostic(data, imagePreds, hasImage) {
-        let sympCount = Object.keys(data.symptoms).length;
-        let cScores = calculateClinicalScores(data);
-        
-        if (!hasImage && sympCount === 0 && data.temp < 37.5 && data.bp === "120/80") {
-            return { disease: "INSUFFICIENT DATA", score: 0, status: "No Data" };
-        }
+    let imgScores = { Malaria: 0, Tuberculosis: 0, Typhoid: 0, Anemia: 0, Hypotension: 0 };
 
-        let imgScores = { Malaria: 0, Tuberculosis: 0, Typhoid: 0, Anemia: 0, Hypotension: 0 };
-        
-        if (hasImage && imagePreds && imagePreds.length > 0) {
-            imagePreds.forEach(pred => {
-                let pClass = pred.className.toLowerCase();
-                let prob = pred.probability;
-                if(pClass.includes("malaria") || pClass.includes("plasmodium")) imgScores["Malaria"] += prob;
-                if(pClass.includes("tb") || pClass.includes("tuberculosis")) imgScores["Tuberculosis"] += prob;
-                if(pClass.includes("anemia")) imgScores["Anemia"] += prob;
-                if(pClass.includes("positive") && !pClass.includes("malaria") && !pClass.includes("tb")) {
-                    Object.keys(imgScores).forEach(k => imgScores[k] += (prob * 0.2)); 
-                }
-            });
-        }
+    if (hasImage && Array.isArray(imagePreds) && imagePreds.length) {
+        imagePreds.forEach(pred => {
+            let pClass = (pred.className || "").toLowerCase();
+            let prob = pred.probability || 0;
 
-        let finalScores = {};
-        ["Malaria", "Tuberculosis", "Typhoid", "Anemia", "Hypotension"].forEach(d => {
-            let iScore = imgScores[d] || 0;
-            let cScore = cScores[d] || 0;
-            let fScore = hasImage ? (["Malaria", "Tuberculosis", "Anemia"].includes(d) ? (iScore * 0.85) + (cScore * 0.15) : (iScore * 0.70) + (cScore * 0.30)) : cScore;
-            finalScores[d] = Math.min(fScore, 0.99); 
+            if (pClass.includes("malaria") || pClass.includes("plasmodium")) imgScores.Malaria += prob;
+            if (pClass.includes("tb") || pClass.includes("tuberculosis")) imgScores.Tuberculosis += prob;
+            if (pClass.includes("anemia")) imgScores.Anemia += prob;
+
+            if (pClass.includes("positive") && !pClass.includes("malaria") && !pClass.includes("tb")) {
+                Object.keys(imgScores).forEach(k => imgScores[k] += prob * 0.2);
+            }
         });
-
-        let sorted = Object.keys(finalScores).map(k => ({disease: k, score: finalScores[k]})).sort((a,b) => b.score - a.score);
-        let top = sorted[0];
-
-        if (top.score <= 0.15) return { disease: "NO ABNORMALITIES DETECTED", score: top.score, status: "Healthy" };
-        return { disease: top.disease, score: top.score, status: top.score >= 0.80 ? "High Confidence" : "Moderate Confidence" };
     }
 
-    function applyResultToUI(result) {
-        const lang = localStorage.getItem('app_lang') || 'en';
-        let { disease, score, status } = result;
-        
-        document.getElementById('res-prob').innerText = Math.round(score * 100) + "% " + TRANSLATIONS[lang].conf_level;
-        document.getElementById('drug-list').innerHTML = (TREATMENTS[disease] || TREATMENTS["INSUFFICIENT DATA"]).drugs;
-        
-        updateAdviceUI(disease, status, lang);
+    let finalScores = {};
+    ["Malaria", "Tuberculosis", "Typhoid", "Anemia", "Hypotension"].forEach(d => {
+        let iScore = imgScores[d] || 0;
+        let cScore = cScores[d] || 0;
+
+        let fScore = hasImage
+            ? (["Malaria", "Tuberculosis", "Anemia"].includes(d)
+                ? (iScore * 0.85 + cScore * 0.15)
+                : (iScore * 0.70 + cScore * 0.30))
+            : cScore;
+
+        finalScores[d] = Math.min(Math.max(fScore, 0), 0.99);
+    });
+
+    let top = Object.entries(finalScores)
+        .map(([disease, score]) => ({ disease, score }))
+        .sort((a, b) => b.score - a.score)[0];
+
+    if (top.score <= 0.15) {
+        return { disease: "NO ABNORMALITIES DETECTED", score: top.score, status: "Healthy" };
     }
 
-    async function startAnalysisSequence() {
-        document.getElementById('analyze-overlay').style.display = 'flex';
-        
-        let clinicalData = extractClinicalData();
-        let imagePreds = null;
-        let hasImage = false;
-
-        if(model && (useWebcam || uploadedFile)) {
-            hasImage = true;
-            let imgElement = useWebcam ? webcam.canvas : uploadedFile;
-            imagePreds = await model.predict(imgElement);
-        }
-
-        setTimeout(() => {
-            let finalResult = resolveDiagnostic(clinicalData, imagePreds, hasImage);
-            document.getElementById('analyze-overlay').style.display = 'none';
-            applyResultToUI(finalResult);
-            
-            document.getElementById('p6').classList.remove('active');
-            currentStep = 7; 
-            document.getElementById('pResult').classList.add('active');
-            document.getElementById('backBtn').style.display = 'none';
-            document.getElementById('nextBtn').style.display = 'none';
-        }, 2500); 
-    }
+    return {
+        disease: top.disease,
+        score: top.score,
+        status: top.score >= 0.80 ? "High Confidence" : "Moderate Confidence"
+    };
+}
 </script>
-
-</body>
+</body> 
 </html>
