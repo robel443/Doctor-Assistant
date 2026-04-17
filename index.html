@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Assistant | Neural Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    
+    <style>
+        /* --- PREMIUM CREAM & LIGHT BLUE THEME --- */
+        :root {
+            --bg-cream: #FFFDF5;
+            --primary-blue: #00A3FF;
+            --light-blue: #E3F2FD;
+            --deep-navy: #1A237E;
+            --white: #ffffff;
+            --radius: 24px;
+            --shadow: 0 12px 40px rgba(0, 163, 255, 0.1);
+            --text-color: #555;
+            transition: all 0.4s ease;
+        }
+
+        /* --- DARK MODE VARIABLES --- */
+        :root[data-theme="dark"] {
+            --bg-cream: #121212;
+            --primary-blue: #9b51e0; 
+            --light-blue: #2d2d3a;
+            --deep-navy: #ffffff;
+            --white: #1e1e24;
+            --shadow: 0 12px 40px rgba(155, 81, 224, 0.15);
+            --text-color: #cccccc;
+        }
+
+        body {
+            background-color: var(--bg-cream);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: var(--deep-navy);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            width: 100%;
+            max-width: 480px;
+            background: var(--white);
+            margin: 15px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            height: 94vh;
+        }
+
+        /* --- NAVIGATION & HEADER --- */
+        header { padding: 20px 20px 15px 20px; border-bottom: 1px solid var(--light-blue); }
+        .top-nav { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+        
+        .gear-btn { 
+            background: var(--light-blue); color: var(--primary-blue); border: none; 
+            border-radius: 14px; width: 45px; height: 45px; font-size: 22px; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center; 
+            transition: 0.3s; box-shadow: 0 4px 10px rgba(0, 163, 255, 0.1);
+        }
+        .gear-btn:hover { background: var(--primary-blue); color: var(--white); transform: rotate(45deg); }
+        
+        .header-center { display: flex; flex-direction: column; align-items: center; text-align: center; flex: 1; }
+        .logo { font-size: 36px; margin-bottom: 5px; }
+        .brand-text h1 { margin: 0; font-size: 20px; color: var(--deep-navy); }
+        .brand-text span { font-size: 9px; color: var(--primary-blue); font-weight: 800; letter-spacing: 1.5px; }
+        .nav-spacer { width: 45px; } 
+
+        /* --- COMBINED SETTINGS & ABOUT MODAL --- */
+        .modal-overlay { 
+            position: absolute; inset: 0; background: rgba(26, 35, 126, 0.4); z-index: 3000; 
+            display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px); 
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show { display: flex; opacity: 1; }
+        .modal-content { 
+            background: var(--white); padding: 30px; border-radius: var(--radius); width: 80%; 
+            text-align: center; box-shadow: var(--shadow); border: 2px solid var(--light-blue); 
+            transform: translateY(20px); animation: slideUp 0.4s ease forwards;
+            max-height: 80vh; overflow-y: auto;
+        }
+        .modal-content::-webkit-scrollbar { width: 6px; }
+        .modal-content::-webkit-scrollbar-thumb { background: var(--light-blue); border-radius: 10px; }
+        .modal-content h3 { margin: 0 0 15px 0; color: var(--deep-navy); font-size: 20px; }
+        
+        .about-toggle-btn {
+            background: var(--light-blue); color: var(--primary-blue); border: none; padding: 12px;
+            width: 100%; border-radius: 14px; font-weight: 800; font-size: 14px; cursor: pointer;
+            transition: 0.3s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 15px;
+        }
+        .about-toggle-btn:hover { background: var(--primary-blue); color: var(--white); }
+
+        .close-btn { 
+            background: var(--primary-blue); color: white; padding: 12px 25px; border: none; 
+            border-radius: 14px; font-weight: 800; cursor: pointer; transition: 0.3s; width: 100%; margin-top: 15px;
+        }
+        .close-btn:hover { opacity: 0.9; transform: translateY(-2px); }
+
+        /* Main Content */
+        main { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; }
+        .page { display: none; animation: fadeIn 0.4s ease; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { to { transform: translateY(0); } }
+
+        h2 { font-size: 20px; margin-bottom: 15px; border-left: 4px solid var(--primary-blue); padding-left: 10px; color: var(--deep-navy); }
+
+        /* Inputs */
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-size: 12px; font-weight: 800; margin-bottom: 6px; color: var(--primary-blue); text-transform: uppercase; }
+        input, select {
+            width: 100%; padding: 14px; border-radius: 16px; border: 2px solid var(--light-blue);
+            font-size: 16px; outline: none; box-sizing: border-box; transition: 0.3s;
+            background: var(--white); color: var(--deep-navy);
+        }
+        input:focus, select:focus { border-color: var(--primary-blue); }
+
+        /* Search & Grid */
+        .search-container { position: sticky; top: 0; background: var(--white); z-index: 10; padding-bottom: 10px; }
+        .grid-container { display: grid; gap: 10px; }
+        .selectable-card {
+            background: var(--bg-cream); border: 2px solid #F0F4F8; border-radius: 18px; padding: 15px;
+            cursor: pointer; transition: 0.3s; color: var(--deep-navy);
+        }
+        :root[data-theme="dark"] .selectable-card { border-color: #333; }
+        .selectable-card.selected { border-color: var(--primary-blue); background: var(--light-blue); }
+        .duration-ui { margin-top: 10px; display: none; }
+        .selectable-card.selected .duration-ui { display: block; }
+
+        /* Imaging / Lab */
+        .preview-box { 
+            width: 100%; aspect-ratio: 1/1; background: var(--light-blue); border-radius: 20px; 
+            overflow: hidden; margin-bottom: 15px; border: 2px solid var(--light-blue);
+            position: relative;
+        }
+        #webcam-view, #img-preview { width: 100%; height: 100%; object-fit: cover; }
+        .placeholder-icon { 
+            position: absolute; inset: 0; display: flex; align-items: center; 
+            justify-content: center; font-size: 70px; color: #ccc; flex-direction: column; 
+        }
+
+        /* --- MODERN NEURAL ANALYZING OVERLAY --- */
+        .overlay {
+            position: absolute; inset: 0; background: var(--white); z-index: 2000;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center;
+        }
+        .neural-loader { position: relative; width: 120px; height: 120px; margin-bottom: 30px; }
+        .neural-circle {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 100%; height: 100%; border: 4px solid var(--primary-blue); border-radius: 50%;
+            opacity: 0; animation: neuralPulse 2s cubic-bezier(0.21, 0.53, 0.56, 0.8) infinite;
+        }
+        .neural-circle:nth-child(2) { animation-delay: 0.6s; }
+        .neural-circle:nth-child(3) { animation-delay: 1.2s; }
+        .neural-core {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 40px; height: 40px; background: var(--primary-blue); border-radius: 50%;
+            box-shadow: 0 0 20px var(--primary-blue); display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 20px; z-index: 2;
+        }
+        @keyframes neuralPulse {
+            0% { width: 40px; height: 40px; opacity: 1; border-width: 8px; }
+            100% { width: 140px; height: 140px; opacity: 0; border-width: 1px; }
+        }
+        .analysis-text { font-size: 22px; font-weight: 700; color: var(--deep-navy); letter-spacing: 0.5px; }
+        .analysis-sub { font-size: 12px; color: var(--primary-blue); font-weight: 800; margin-top: 8px; letter-spacing: 2px; text-transform: uppercase; }
+
+        /* Results & Advice */
+        .result-box { background: var(--light-blue); border-radius: 20px; padding: 25px; text-align: center; }
+        .med-advice { background: var(--bg-cream); padding: 15px; border-radius: 15px; margin-top: 15px; text-align: left; border: 1px solid var(--light-blue); }
+        .human-advice { display: flex; flex-direction: column; gap: 8px; }
+        .human-advice h4 { font-size: 13px; color: var(--primary-blue); margin: 10px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--light-blue); padding-bottom: 4px; }
+        .human-advice p { font-size: 14px; color: var(--deep-navy); line-height: 1.5; margin: 0; }
+        .human-advice ul { margin: 5px 0; padding-left: 20px; font-size: 14px; color: var(--deep-navy); line-height: 1.5; }
+
+        /* Footer */
+        footer { padding: 20px; display: flex; gap: 10px; border-top: 1px solid var(--light-blue); background: var(--white); }
+        .btn { flex: 1; padding: 16px; border-radius: 18px; border: none; font-weight: 800; cursor: pointer; transition: 0.3s; }
+        .btn-next { background: var(--primary-blue); color: white; }
+        .btn-next:disabled { background: #b0bec5; cursor: not-allowed; }
+        .btn-back { background: var(--light-blue); color: var(--deep-navy); }
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-content">
+            <h3 data-i18n="settings_title">Settings</h3>
+            <div class="input-group" style="text-align: left;">
+                <label data-i18n="language_label">Language</label>
+                <select id="lang-select" onchange="changeLanguage(this.value)">
+                    <option value="en">English 🇬🇧</option>
+                    <option value="am">Amharic 🇪🇹</option>
+                    <option value="ti">Tigrigna 🇪🇷/🇪🇹</option>
+                </select>
+            </div>
+            <div class="input-group" style="text-align: left; margin-bottom: 5px;">
+                <label data-i18n="theme_label">Theme Mode</label>
+                <select id="theme-select" onchange="changeTheme(this.value)">
+                    <option value="light" data-i18n="light_mode">Light Mode ☀️</option>
+                    <option value="dark" data-i18n="dark_mode">Dark Mode 🌙</option>
+                </select>
+            </div>
+            
+            <button class="about-toggle-btn" onclick="toggleAbout()">ℹ️ <span data-i18n="about_title">About App</span></button>
+            
+            <div id="about-expanded" style="display: none; text-align: left; font-size: 13px; color: var(--text-color); line-height: 1.6; margin-top: 15px; padding: 15px; background: var(--bg-cream); border-radius: 12px; border: 1px solid var(--light-blue);">
+                <strong data-i18n="app_name_label">App Name:</strong> <span data-i18n="app_name_val">AI Medical Assistant</span><br>
+                <strong data-i18n="version_label">Version:</strong> <span data-i18n="version_val">2.0.1 (Neural Edge)</span><br><br>
+                <strong data-i18n="purpose_label">Purpose:</strong> <span data-i18n="purpose_val">AI-powered symptom and image-based medical support system.</span><br><br>
+                <strong data-i18n="desc_label">Description:</strong> <span data-i18n="desc_val">Combines Teachable Machine visual recognition with a clinical reasoning system. It leverages real-time local processing to analyze symptom duration, physiological vitals, and image classification probabilities concurrently. This hybrid diagnostic fusion runs entirely offline after the initial load.</span><br><br>
+                <strong data-i18n="privacy_label">Privacy:</strong> <span data-i18n="privacy_val">No data is stored externally. Your camera feed and physical measurements remain strictly on your device.</span>
+                
+                <div style="background: rgba(255, 71, 87, 0.1); padding: 10px; border-left: 3px solid #ff4757; margin-top: 15px; border-radius: 4px; font-size: 12px;">
+                    <strong style="color: #ff4757;" data-i18n="disclaimer_label">Disclaimer:</strong><br>
+                    <span style="color: #ff4757;" data-i18n="disclaimer_val">Not a replacement for doctors. Not medically certified. Only an educational support tool. Always consult a certified professional for medical decisions.</span>
+                </div>
+            </div>
+
+            <button class="close-btn" onclick="closeSettings()" data-i18n="btn_save">Save & Close</button>
+        </div>
+    </div>
+
+    <div class="overlay" id="analyze-overlay">
+        <div class="neural-loader">
+            <div class="neural-circle"></div><div class="neural-circle"></div><div class="neural-circle"></div><div class="neural-core">🧠</div>
+        </div>
+        <div class="analysis-text" data-i18n="analyzing">Neural Analysis</div>
+        <div class="analysis-sub" data-i18n="processing">Processing Bio-Data</div>
+    </div>
+
+    <header>
+        <div class="top-nav">
+            <div class="nav-spacer"></div> 
+            <div class="header-center">
+                <div class="logo">👨‍⚕️</div>
+                <div class="brand-text">
+                    <h1 data-i18n="app_title">Doctor Assistant</h1>
+                    <span data-i18n="app_subtitle">NEURAL DIAGNOSTIC SYSTEM</span>
+                </div>
+            </div>
+            <button class="gear-btn" onclick="openSettings()">⚙️</button>
+        </div>
+    </header>
+
+    <main id="flow">
+        <section class="page active" id="p1">
+            <h2 data-i18n="step1_title">Patient Profile</h2>
+            <div class="input-group"><label data-i18n="full_name">Full Name</label><input type="text" id="name" data-i18n-ph="ph_name" placeholder="Name"></div>
+            <div class="input-group"><label data-i18n="age">Age</label><input type="number" id="age" placeholder="18"></div>
+            <div class="input-group">
+                <label data-i18n="sex">Sex</label>
+                <select id="sex">
+                    <option data-i18n="male">Male</option>
+                    <option data-i18n="female">Female</option>
+                    <option data-i18n="other">Other</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="page" id="p2">
+            <h2 data-i18n="step2_title">Environment</h2>
+            <div class="input-group">
+                <label data-i18n="continent">Continent</label>
+                <select id="continent">
+                    <option data-i18n="cont_af">Africa</option><option data-i18n="cont_as">Asia</option><option selected data-i18n="cont_eu">Europe</option>
+                    <option data-i18n="cont_na">North America</option><option data-i18n="cont_sa">South America</option><option data-i18n="cont_au">Australia</option>
+                </select>
+            </div>
+            <div class="input-group"><label data-i18n="loc_type">Location Type</label><select id="locType"><option data-i18n="urban">Urban</option><option data-i18n="rural">Rural</option></select></div>
+            <div class="input-group"><label data-i18n="altitude">Altitude</label><select id="alt"><option data-i18n="lowland">Lowland</option><option data-i18n="highland">Highland</option></select></div>
+        </section>
+
+        <section class="page" id="p3">
+            <h2 data-i18n="step3_title">Symptoms</h2>
+            <div class="search-container">
+                <input type="text" id="sympSearch" data-i18n-ph="ph_symp" placeholder="🔍 Search symptoms..." onkeyup="filterItems('sympSearch', 'symp-box')">
+            </div>
+            <div class="grid-container" id="symp-box"></div>
+        </section>
+
+        <section class="page" id="p4">
+            <h2 data-i18n="step4_title">Medical History</h2>
+            <div class="search-container">
+                <input type="text" id="histSearch" data-i18n-ph="ph_hist" placeholder="🔍 Search history..." onkeyup="filterItems('histSearch', 'hist-box')">
+            </div>
+            <div class="grid-container" id="hist-box"></div>
+        </section>
+
+        <section class="page" id="p5">
+            <h2 data-i18n="step5_title">Physical Measurements</h2>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div class="input-group"><label data-i18n="temp">Temp (°C)</label><input type="number" step="0.1" value="36.6" id="tempValue"></div>
+                <div class="input-group"><label data-i18n="heartbeat">Heartbeat</label><input type="number" value="75"></div>
+                <div class="input-group"><label data-i18n="bp">Blood Pressure</label><input type="text" placeholder="120/80"></div>
+                <div class="input-group"><label data-i18n="oxygen">Oxygen (%)</label><input type="number" value="98"></div>
+                <div class="input-group"><label data-i18n="weight">Weight (kg)</label><input type="number" placeholder="70"></div>
+                <div class="input-group"><label data-i18n="height">Height (cm)</label><input type="number" placeholder="175"></div>
+                <div class="input-group"><label data-i18n="blood_sugar">Blood Sugar (mg/dL)</label><input type="number" placeholder="90"></div>
+                <div class="input-group"><label data-i18n="resp_rate">Respiration Rate</label><input type="number" placeholder="16"></div>
+            </div>
+        </section>
+
+        <section class="page" id="p6">
+            <h2 data-i18n="step6_title">Laboratory Test</h2>
+            <div class="preview-box">
+                <div class="placeholder-icon" id="placeholder">
+                    🧬🔬<span style="font-size:12px; font-weight:800; color:#aaa; margin-top:10px;" data-i18n="awaiting_sample">AWAITING SAMPLE</span>
+                </div>
+                <div id="webcam-view" style="display:none;"></div>
+                <img id="img-preview" style="display:none;">
+            </div>
+            <div style="display:grid; gap:10px; grid-template-columns:1fr 1fr;">
+                <button class="btn btn-back" onclick="initWebcam()">📷 <span data-i18n="camera">Camera</span></button>
+                <label class="btn btn-back" style="text-align:center;">📁 <span data-i18n="upload">Upload</span><input type="file" hidden accept="image/*" onchange="previewImage(this)"></label>
+            </div>
+        </section>
+
+        <section class="page" id="pResult">
+            <div class="result-box">
+                <p style="font-size:12px; font-weight:800; color:var(--primary-blue);" data-i18n="neural_diag">NEURAL DIAGNOSIS</p>
+                <h1 id="res-disease" style="font-size:32px; margin:10px 0;">--</h1>
+                <div style="background:var(--primary-blue); color:white; display:inline-block; padding:8px 20px; border-radius:20px; font-weight:800;" id="res-prob">0%</div>
+            </div>
+            <div class="med-advice">
+                <label data-i18n="med_label">Sample Medications</label>
+                <p id="drug-list" style="font-size:14px; margin-top:5px; margin-bottom:15px; color: var(--deep-navy);"></p>
+                <label data-i18n="advice_label">Medical Advice</label>
+                <div id="advice-container" style="margin-top:5px;"></div>
+            </div>
+            <button class="btn btn-next" style="width:100%; margin-top:20px;" onclick="location.reload()" data-i18n="new_patient">New Patient</button>
+        </section>
+    </main>
+
+    <footer id="nav-bar">
+        <button class="btn btn-back" id="backBtn" onclick="navigate(-1)" style="display:none;" data-i18n="btn_back">Back</button>
+        <button class="btn btn-next" id="nextBtn" onclick="navigate(1)" data-i18n="btn_next">Next Step</button>
+    </footer>
+</div>
+
+<script>
+    function toggleAbout() {
+        const content = document.getElementById('about-expanded');
+        content.style.display = content.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // --- COMPREHENSIVE GLOBAL DICTIONARY ---
+    const TRANSLATIONS = {
+        en: {
+            app_title: "Doctor Assistant", app_subtitle: "NEURAL DIAGNOSTIC SYSTEM",
+            settings_title: "Settings", language_label: "Language", theme_label: "Theme Mode",
+            light_mode: "Light Mode ☀️", dark_mode: "Dark Mode 🌙", btn_save: "Save & Close",
+            about_title: "About App", app_name_label: "App Name:", app_name_val: "AI Medical Assistant",
+            version_label: "Version:", version_val: "2.0.1 (Neural Edge)",
+            purpose_label: "Purpose:", purpose_val: "AI-powered symptom and image-based medical support system.",
+            desc_label: "Description:", desc_val: "Combines Teachable Machine visual recognition with a clinical reasoning system. It leverages real-time local processing to analyze symptom duration, physiological vitals, and image classification probabilities concurrently. This hybrid diagnostic fusion runs entirely offline after the initial load.",
+            privacy_label: "Privacy:", privacy_val: "No data is stored externally. Your camera feed and physical measurements remain strictly on your device.",
+            disclaimer_label: "Disclaimer:", disclaimer_val: "Not a replacement for doctors. Not medically certified. Only an educational support tool. Always consult a certified professional for medical decisions.",
+            step1_title: "Patient Profile", full_name: "Full Name", ph_name: "Name", age: "Age", sex: "Sex", male: "Male", female: "Female", other: "Other",
+            step2_title: "Environment", continent: "Continent", cont_af: "Africa", cont_as: "Asia", cont_eu: "Europe", cont_na: "North America", cont_sa: "South America", cont_au: "Australia",
+            loc_type: "Location Type", urban: "Urban", rural: "Rural", altitude: "Altitude", lowland: "Lowland", highland: "Highland",
+            step3_title: "Symptoms", ph_symp: "🔍 Search symptoms...", step4_title: "Medical History", ph_hist: "🔍 Search history...",
+            step5_title: "Physical Measurements", temp: "Temp (°C)", heartbeat: "Heartbeat", bp: "Blood Pressure", oxygen: "Oxygen (%)", weight: "Weight (kg)", height: "Height (cm)", blood_sugar: "Blood Sugar (mg/dL)", resp_rate: "Respiration Rate",
+            step6_title: "Laboratory Test", awaiting_sample: "AWAITING SAMPLE", camera: "Camera", upload: "Upload",
+            neural_diag: "NEURAL DIAGNOSIS", med_label: "Sample Medications", advice_label: "Medical Advice", new_patient: "New Patient",
+            btn_back: "Back", btn_next: "Next Step", btn_analyze: "Analyze", analyzing: "Neural Analysis", processing: "Processing Bio-Data",
+            conf_level: "Confidence", dur_label: "Duration",
+            
+            // Advice Headers
+            h_summary: "🩺 Condition Summary", h_now: "💊 What You Can Do Now", h_help: "⚠️ When to Seek Help", h_tips: "🌿 General Care Tips",
+
+            // Diseases & Messages
+            dis_malaria: "Malaria", dis_tb: "Tuberculosis", dis_typhoid: "Typhoid", dis_anemia: "Anemia", dis_hypo: "Hypotension", dis_none: "NO ABNORMALITIES DETECTED", dis_insuf: "INSUFFICIENT DATA",
+            
+            // Symptoms
+            s_fever: "Fever", s_headache: "Headache", s_fatigue: "Fatigue", s_chills: "Chills", s_cough: "Cough", s_nausea: "Nausea", s_vomiting: "Vomiting", s_diarrhea: "Diarrhea", s_muscle_pain: "Muscle Pain", s_joint_pain: "Joint Pain", s_skin_rash: "Skin Rash", s_sweating: "Sweating", s_loss_appetite: "Loss of Appetite", s_dizziness: "Dizziness", s_sore_throat: "Sore Throat", s_chest_pain: "Chest Pain", s_abd_pain: "Abdominal Pain", s_short_breath: "Shortness of Breath", s_weakness: "Weakness", s_nasal_cong: "Nasal Congestion", s_weight_loss: "Weight Loss",
+            
+            // History
+            h_malaria: "Malaria History", h_hyper: "Hypertension", h_t1d: "Type 1 Diabetes", h_t2d: "Type 2 Diabetes", h_asthma: "Asthma", h_heart: "Heart Disease", h_anemia: "Anemia", h_tb: "Tuberculosis", h_hiv: "HIV/AIDS", h_surgery: "Recent Surgery", h_pneumonia: "Pneumonia History", h_allergies: "Allergies", h_cancer: "Cancer History",
+
+            // Durations
+            d1: "< 1 day", d2: "1–3 days", d3: "3–7 days", d4: "1–2 weeks", d5: "2–4 weeks", d6: "> 1 month"
+        },
+        am: {
+            app_title: "የሐኪም ረዳት", app_subtitle: "የኒውራል ምርመራ ስርዓት",
+            settings_title: "ቅንብሮች", language_label: "ቋንቋ", theme_label: "ገጽታ",
+            light_mode: "ብሩህ ገጽታ ☀️", dark_mode: "ጨለማ ገጽታ 🌙", btn_save: "አስቀምጥ",
+            about_title: "ስለ መተግበሪያው", app_name_label: "ስም:", app_name_val: "የህክምና ረዳት (AI)",
+            version_label: "ስሪት:", version_val: "2.0.1 (Neural Edge)",
+            purpose_label: "አላማ:", purpose_val: "የምልክት ትንተና ድጋፍ መሳሪያ",
+            desc_label: "መግለጫ:", desc_val: "ሰው ሰራሽ አስተውሎትን ከህክምና ማስረጃ ጋር ያጣምራል። ያለ በይነመረብ ይሰራል:: የምልክት ቆይታን፣ የሰውነት ልኬቶችን እና የምስል ትንተናን በአንድ ላይ በመጠቀም ፈጣን ውጤት ይሰጣል።",
+            privacy_label: "ግላዊነት:", privacy_val: "ምንም መረጃ ከስልክዎ አይወጣም። ካሜራዎ እና የግል መረጃዎ በመሳሪያዎ ላይ ብቻ ይቀራሉ።",
+            disclaimer_label: "ማስጠንቀቂያ:", disclaimer_val: "ትክክለኛ የህክምና መመርመሪያ መሳሪያ አይደለም። ለትምህርት ብቻ። ለህክምና ውሳኔ ሁልጊዜ ባለሙያ ያማክሩ።",
+            step1_title: "የታካሚ መገለጫ", full_name: "ሙሉ ስም", ph_name: "ስም", age: "ዕድሜ", sex: "ፆታ", male: "ወንድ", female: "ሴት", other: "ሌላ",
+            step2_title: "አካባቢ", continent: "አህጉር", cont_af: "አፍሪካ", cont_as: "እስያ", cont_eu: "አውሮፓ", cont_na: "ሰሜን አሜሪካ", cont_sa: "ደቡብ አሜሪካ", cont_au: "አውስትራሊያ",
+            loc_type: "የአካባቢ አይነት", urban: "ከተማ", rural: "ገጠር", altitude: "ከፍታ", lowland: "ቆላ", highland: "ደጋ",
+            step3_title: "ምልክቶች", ph_symp: "🔍 ምልክቶችን ይፈልጉ...", step4_title: "የህክምና ታሪክ", ph_hist: "🔍 ታሪክ ይፈልጉ...",
+            step5_title: "አካላዊ ልኬቶች", temp: "ሙቀት (°C)", heartbeat: "የልብ ምት", bp: "የደም ግፊት", oxygen: "ኦክስጅን (%)", weight: "ክብደት (kg)", height: "ቁመት (cm)", blood_sugar: "የደም ስኳር", resp_rate: "የአተነፋፈስ ፍጥነት",
+            step6_title: "የላቦራቶሪ ምርመራ", awaiting_sample: "ናሙና በመጠበቅ ላይ", camera: "ካሜራ", upload: "ጫን",
+            neural_diag: "የምርመራ ውጤት", med_label: "መድሃኒቶች", advice_label: "የህክምና ምክር", new_patient: "አዲስ ታካሚ",
+            btn_back: "ተመለስ", btn_next: "ቀጣይ", btn_analyze: "ተንትን", analyzing: "ትንተና በመካሄድ ላይ", processing: "ዳታ በመሰራጨት ላይ",
+            conf_level: "እርግጠኝነት", dur_label: "ቆይታ",
+
+            h_summary: "🩺 ስለ ሁኔታው አጭር ማብራሪያ", h_now: "💊 አሁን ማድረግ የሚችሉት", h_help: "⚠️ መቼ እርዳታ ማግኘት እንዳለብዎ", h_tips: "🌿 አጠቃላይ የጤና ምክሮች",
+
+            dis_malaria: "ወባ", dis_tb: "የሳንባ ነቀርሳ", dis_typhoid: "ታይፎይድ", dis_anemia: "የደም ማነስ", dis_hypo: "ዝቅተኛ የደም ግፊት", dis_none: "ምንም ችግር አልተገኘም", dis_insuf: "በቂ መረጃ የለም",
+
+            s_fever: "ትኩሳት", s_headache: "ራስ ምታት", s_fatigue: "ድካም", s_chills: "ብርድ ብርድ ማለት", s_cough: "ሳል", s_nausea: "ማቅለሽለሽ", s_vomiting: "ማስታወክ", s_diarrhea: "ተቅማጥ", s_muscle_pain: "የጡንቻ ህመም", s_joint_pain: "የመገጣጠሚያ ህመም", s_skin_rash: "የቆዳ ሽፍታ", s_sweating: "ማላብ", s_loss_appetite: "የምግብ ፍላጎት መቀነስ", s_dizziness: "ማዞር", s_sore_throat: "የጉሮሮ ህመም", s_chest_pain: "የደረት ህመም", s_abd_pain: "የሆድ ህመም", s_short_breath: "የመተንፈስ ችግር", s_weakness: "የሰውነት መዛል", s_nasal_cong: "የአፍንጫ መታፈን", s_weight_loss: "የክብደት መቀነስ",
+
+            h_malaria: "የወባ ታሪክ", h_hyper: "የደም ግፊት", h_t1d: "ዓይነት 1 ስኳር", h_t2d: "ዓይነት 2 ስኳር", h_asthma: "አስም", h_heart: "የልብ በሽታ", h_anemia: "የደም ማነስ", h_tb: "የሳንባ ነቀርሳ", h_hiv: "ኤች አይ ቪ / ኤድስ", h_surgery: "የቅርብ ጊዜ ቀዶ ጥገና", h_pneumonia: "የሳምባ ምች", h_allergies: "አለርጂ", h_cancer: "ካንሰር",
+
+            d1: "ከ 1 ቀን በታች", d2: "1–3 ቀናት", d3: "3–7 ቀናት", d4: "1–2 ሳምንታት", d5: "2–4 ሳምንታት", d6: "ከ 1 ወር በላይ"
+        },
+        ti: {
+            app_title: "ሓጋዚ ሓኪም", app_subtitle: "ናይ ኒውራል ምርመራ ስርዓት",
+            settings_title: "ቅጥዕታት", language_label: "ቋንቋ", theme_label: "ገጽታ",
+            light_mode: "ብሩህ ገጽታ ☀️", dark_mode: "ጸልማት ገጽታ 🌙", btn_save: "ዓቅብ",
+            about_title: "ብዛዕባ ኣፕሊኬሽን", app_name_label: "ስም ኣፕ:", app_name_val: "ሓጋዚ ሕክምና (AI)",
+            version_label: "ቨርሽን:", version_val: "2.0.1 (Neural Edge)",
+            purpose_label: "ዕላማ:", purpose_val: "ናይ ምልክታት ትንታነ መሳርሒ",
+            desc_label: "መግለጺ:", desc_val: "ብAI ዝሰርሕ ናይ ሕክምና ደገፍ። ብዘይ ኢንተርነት ይሰርሕ። ንውሓት ምልክታት፣ ኣካላዊ መለክዒታትን ትንታነ ስእልን ብሓንሳብ ብምጥቃም ቅልጡፍ ውጽኢት ይህብ።",
+            privacy_label: "ሕልዉና:", privacy_val: "ዝኾነ ሓበሬታ ናብ ደገ ኣይወጽእን። ካሜራኹምን ውልቃዊ ሓበሬታኹምን ኣብ መሳርሒኹም ጥራሕ ይተርፍ።",
+            disclaimer_label: "መጠንቀቕታ:", disclaimer_val: "ናይ ሓቂ መርመራ ሕክምና ኣይኮነን። ንትምህርቲ ጥራሕ። ንውሳኔ ሕክምና ኩሉሻዕ ንበዓል ሞያ ተወከሱ።",
+            step1_title: "መግለጺ ሕሙም", full_name: "ሙሉእ ስም", ph_name: "ስም", age: "ዕድመ", sex: "ጾታ", male: "ተባዕታይ", female: "ኣንስተይቲ", other: "ካሊእ",
+            step2_title: "ከባቢ", continent: "ክፍለ-ዓለም", cont_af: "ኣፍሪቃ", cont_as: "እስያ", cont_eu: "ኣውሮፓ", cont_na: "ሰሜን ኣሜሪካ", cont_sa: "ደቡብ ኣሜሪካ", cont_au: "ኣውስትራልያ",
+            loc_type: "ዓይነት ከባቢ", urban: "ከተማ", rural: "ገጠር", altitude: "ብራኸ", lowland: "ቆላ", highland: "ደጋ",
+            step3_title: "ምልክታት", ph_symp: "🔍 ምልክታት ድለ...", step4_title: "ናይ ሕክምና ታሪኽ", ph_hist: "🔍 ታሪኽ ድለ...",
+            step5_title: "ኣካላዊ መለክዒታት", temp: "ሙቐት (°C)", heartbeat: "ትርግታ ልቢ", bp: "ጸቕጢ ደም", oxygen: "ኦክስጅን (%)", weight: "ክብደት (kg)", height: "ቁመት (cm)", blood_sugar: "ሽኮር ደም", resp_rate: "ናህሪ ትንፋስ",
+            step6_title: "ናይ ላቦራቶሪ መርመራ", awaiting_sample: "ሳምፕል ይጽበ ኣሎ", camera: "ካሜራ", upload: "ጽዓን",
+            neural_diag: "ውጽኢት መርመራ", med_label: "መድሃኒታት", advice_label: "ምኽሪ ሕክምና", new_patient: "ሓዱሽ ሕሙም",
+            btn_back: "ተመለስ", btn_next: "ቀጻሊ", btn_analyze: "ተንትን", analyzing: "ትንታነ እናተገበረ", processing: "ዳታ እናተሰርሐ",
+            conf_level: "እርግጸኝነት", dur_label: "ንውሓት",
+
+            h_summary: "🩺 ሓጺር መግለጺ ኩነታት", h_now: "💊 ሕዚ ክትገብሮዎ ዝግባእ", h_help: "⚠️ መዓዝ ሓገዝ ክትደልዩ ከምዘለኩም", h_tips: "🌿 ሓፈሻዊ ናይ ጥዕና ምኽርታት",
+
+            dis_malaria: "ዓሶ", dis_tb: "ቲቢ", dis_typhoid: "ታይፎይድ", dis_anemia: "ዋሕዲ ደም", dis_hypo: "ትሑት ጸቕጢ ደም", dis_none: "ጸገም ኣይተረኽበን", dis_insuf: "እኹል ሓበሬታ የለን",
+
+            s_fever: "ረስኒ", s_headache: "ሕማም ርእሲ", s_fatigue: "ድኻም", s_chills: "ቁሪ ቁሪ ምባል", s_cough: "ሰዓል", s_nausea: "ምግልባጥ", s_vomiting: "ምምላስ", s_diarrhea: "ውጽኣት", s_muscle_pain: "ሕማም ጭዋዳ", s_joint_pain: "ሕማም መገጣጠሚ", s_skin_rash: "ናይ ቆርበት ሽፍታ", s_sweating: "ረሃጽ", s_loss_appetite: "ድሌት መግቢ ምጥፋእ", s_dizziness: "ምጽዋር", s_sore_throat: "ሕማም ጎረሮ", s_chest_pain: "ሕማም ኣፍልቢ", s_abd_pain: "ሕማም ከብዲ", s_short_breath: "ጸገም ትንፋስ", s_weakness: "ምድኻም", s_nasal_cong: "ኣፍንጫ ምዕጻው", s_weight_loss: "ክብደት ምቅናስ",
+
+            h_malaria: "ታሪኽ ዓሶ", h_hyper: "ጸቕጢ ደም", h_t1d: "ዓይነት 1 ሽኮር", h_t2d: "ዓይነት 2 ሽኮር", h_asthma: "ኣስም", h_heart: "ሕማም ልቢ", h_anemia: "ዋሕዲ ደም", h_tb: "ቲቢ", h_hiv: "ኤች ኣይ ቪ / ኤድስ", h_surgery: "ናይ ቀረባ መጥባሕቲ", h_pneumonia: "ነድሪ ሳንቡእ", h_allergies: "ኣለርጂ", h_cancer: "ካንሰር",
+
+            d1: "ትሕቲ 1 መዓልቲ", d2: "1–3 መዓልቲ", d3: "3–7 መዓልቲ", d4: "1–2 ሰሙን", d5: "2–4 ሰሙን", d6: "ልዕሊ 1 ወርሒ"
+        }
+    };
+
+    const SYMPTOMS_DATA = [
+        {id: "s_fever", key: "fever"}, {id: "s_headache", key: "headache"}, {id: "s_fatigue", key: "fatigue"}, {id: "s_chills", key: "chills"}, {id: "s_cough", key: "cough"}, {id: "s_nausea", key: "nausea"}, {id: "s_vomiting", key: "vomiting"}, {id: "s_diarrhea", key: "diarrhea"}, {id: "s_muscle_pain", key: "muscle pain"}, {id: "s_joint_pain", key: "joint pain"}, {id: "s_skin_rash", key: "skin rash"}, {id: "s_sweating", key: "sweating"}, {id: "s_loss_appetite", key: "loss of appetite"}, {id: "s_dizziness", key: "dizziness"}, {id: "s_sore_throat", key: "sore throat"}, {id: "s_chest_pain", key: "chest pain"}, {id: "s_abd_pain", key: "abdominal pain"}, {id: "s_short_breath", key: "shortness of breath"}, {id: "s_weakness", key: "weakness"}, {id: "s_nasal_cong", key: "nasal congestion"}, {id: "s_weight_loss", key: "weight loss"}
+    ];
+    const HISTORY_DATA = [
+        {id: "h_malaria", key: "malaria history"}, {id: "h_hyper", key: "hypertension"}, {id: "h_t1d", key: "type 1 diabetes"}, {id: "h_t2d", key: "type 2 diabetes"}, {id: "h_asthma", key: "asthma"}, {id: "h_heart", key: "heart disease"}, {id: "h_anemia", key: "anemia"}, {id: "h_tb", key: "tuberculosis"}, {id: "h_hiv", key: "hiv/aids"}, {id: "h_surgery", key: "recent surgery"}, {id: "h_pneumonia", key: "pneumonia history"}, {id: "h_allergies", key: "allergies"}, {id: "h_cancer", key: "cancer history"}
+    ];
+
+    let currentResultDisease = null;
+    let currentResultStatus = null;
+
+    function renderDynamicLists(lang) {
+        const sympBox = document.getElementById('symp-box');
+        const histBox = document.getElementById('hist-box');
+        
+        // Preserve selections
+        const selectedSymp = new Set([...sympBox.querySelectorAll('.selected')].map(c => c.dataset.key));
+        const selectedHist = new Set([...histBox.querySelectorAll('.selected')].map(c => c.dataset.key));
+
+        sympBox.innerHTML = '';
+        SYMPTOMS_DATA.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `selectable-card ${selectedSymp.has(item.key) ? 'selected' : ''}`;
+            card.dataset.key = item.key;
+            card.innerHTML = `
+                <div style="font-weight:700;">${TRANSLATIONS[lang][item.id]}</div>
+                <div class="duration-ui">
+                    <label>${TRANSLATIONS[lang].dur_label}</label>
+                    <select>
+                        <option>${TRANSLATIONS[lang].d1}</option>
+                        <option>${TRANSLATIONS[lang].d2}</option>
+                        <option>${TRANSLATIONS[lang].d3}</option>
+                        <option>${TRANSLATIONS[lang].d4}</option>
+                        <option>${TRANSLATIONS[lang].d5}</option>
+                        <option>${TRANSLATIONS[lang].d6}</option>
+                    </select>
+                </div>
+            `;
+            card.onclick = (e) => { if(e.target.tagName !== 'SELECT') card.classList.toggle('selected'); };
+            sympBox.appendChild(card);
+        });
+
+        histBox.innerHTML = '';
+        HISTORY_DATA.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `selectable-card ${selectedHist.has(item.key) ? 'selected' : ''}`;
+            card.dataset.key = item.key;
+            card.innerHTML = `<div style="font-weight:700;">${TRANSLATIONS[lang][item.id]}</div>`;
+            card.onclick = () => card.classList.toggle('selected');
+            histBox.appendChild(card);
+        });
+    }
+
+    function changeLanguage(lang) {
+        localStorage.setItem('app_lang', lang);
+        
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if(TRANSLATIONS[lang][key]) el.innerText = TRANSLATIONS[lang][key];
+        });
+        
+        document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+            const key = el.getAttribute('data-i18n-ph');
+            if(TRANSLATIONS[lang][key]) el.placeholder = TRANSLATIONS[lang][key];
+        });
+
+        if(currentStep === 6) document.getElementById('nextBtn').innerText = TRANSLATIONS[lang].btn_analyze;
+        
+        renderDynamicLists(lang);
+
+        if(currentResultDisease) {
+            updateAdviceUI(currentResultDisease, currentResultStatus, lang);
+        }
+    }
+
+    function changeTheme(theme) {
+        localStorage.setItem('app_theme', theme);
+        if(theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        else document.documentElement.removeAttribute('data-theme');
+    }
+
+    function openSettings() { 
+        document.getElementById('settings-modal').classList.add('show'); 
+        document.getElementById('about-expanded').style.display = 'none'; // reset about toggle
+    }
+    function closeSettings() { document.getElementById('settings-modal').classList.remove('show'); }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const savedLang = localStorage.getItem('app_lang') || 'en';
+        const savedTheme = localStorage.getItem('app_theme') || 'light';
+        document.getElementById('lang-select').value = savedLang;
+        document.getElementById('theme-select').value = savedTheme;
+        changeLanguage(savedLang);
+        changeTheme(savedTheme);
+    });
+
+    // 🧠 ENHANCED HUMANIZED MEDICAL ADVICE ENGINE
+    const ADVICE_DB = {
+        "Malaria": {
+            en: { sum: "Transmitted by mosquitoes, causes fever and weakness.", now: "Rest immediately. Drink safe water. Use basic fever-reducers.", help: "Clinic if severe vomiting or confusion occurs.", tips: "Use mosquito nets." },
+            am: { sum: "በወባ ትንኝ የሚተላለፍ፤ ትኩሳት እና ድካም ያመጣል።", now: "እረፍት ያድርጉ። በቂ ውሃ ይጠጡ።", help: "ማስታወክ ወይም ግራ መጋባት ካለ ወደ ሐኪም ይሂዱ።", tips: "አጎበር ይጠቀሙ።" },
+            ti: { sum: "ብጣንጡ ዝመሓላለፍ፣ ረስንን ድኻምን የስዕብ።", now: "ዕረፍቲ ግበሩ። ጽሩይ ማይ ስተዩ።", help: "ተደጋጋሚ ምምላስ እንተሃልዩ ናብ ሓኪም ኪዱ።", tips: "ኣጎበር ተጠቐሙ።" }
+        },
+        "Tuberculosis": {
+            en: { sum: "Bacterial infection affecting lungs.", now: "Cover mouth when coughing. Rest well.", help: "Seek care if coughing blood.", tips: "Strictly follow antibiotic plans." },
+            am: { sum: "ሳንባን የሚያጠቃ የባክቴሪያ በሽታ።", now: "ሲያስሉ አፍዎን ይሸፍኑ። እረፍት ያድርጉ።", help: "ደም የተቀላቀለበት ሳል ካለ በአስቸኳይ ሐኪም ያማክሩ።", tips: "የሐኪም ትእዛዝን በጥብቅ ይከተሉ።" },
+            ti: { sum: "ንሳንቡእ ዘጥቅዕ ባክተርያ።", now: "ክትስዕሉ ከለኹም ኣፍኩም ሸፍኑ።", help: "ደም እንተሰዒልኩም ብህጹጽ ሓኪም ርኸቡ።", tips: "ትእዛዝ ሓኪም ብግቡእ ተኸተሉ።" }
+        },
+        "Typhoid": {
+            en: { sum: "Bacterial infection from unsafe food/water.", now: "Stay hydrated. Eat bland foods.", help: "Urgent care for severe stomach pain.", tips: "Ensure drinking water is safe." },
+            am: { sum: "ከተበከለ ምግብ/ውሃ የሚመጣ በሽታ።", now: "በቂ ውሃ ይጠጡ። ቀላል ምግብ ይመገቡ።", help: "ከፍተኛ የሆድ ህመም ካለ ወደ ህክምና ይሂዱ።", tips: "የተጣራ ውሃ ብቻ ይጠጡ።" },
+            ti: { sum: "ካብ ዝተበከለ መግቢ/ማይ ዝመጽእ ሕማም።", now: "ማይ ብዙሕ ስተዩ። ፈኲስ መግቢ ተመገቡ።", help: "ብርቱዕ ሕማም ከብዲ እንተሃልዩ ናብ ክሊኒክ ኪዱ።", tips: "ጽሩይ ማይ ጥራሕ ስተዩ።" }
+        },
+        "Anemia": {
+            en: { sum: "Lack of healthy red blood cells.", now: "Avoid sudden fast movements. Eat iron-rich foods.", help: "See doctor if fainting or chest pain occurs.", tips: "Vitamin C helps iron absorption." },
+            am: { sum: "በቂ ቀይ የደም ሴል አለመኖር።", now: "በድንገት ከመነሳት ይቆጠቡ። በብረት ማዕድን የበለፀጉ ምግቦችን ይመገቡ።", help: "መሳት ወይም የደረት ህመም ካለ ሐኪም ያማክሩ።", tips: "ቫይታሚን ሲ ከብረት ማዕድን ጋር መውሰድ ይጠቅማል።" },
+            ti: { sum: "ዋሕዲ ቀያሕቲ ዋህዮታት ደም።", now: "ብሃንደበት ካብ ምትንሳእ ተቖጠቡ።", help: "ምውዳቕ ወይ ሕማም ኣፍልቢ እንተሃልዩ ሓኪም ርኸቡ።", tips: "ቫይታሚን ሲ ምውሳድ ይጠቅም።" }
+        },
+        "Hypotension": {
+            en: { sum: "Lower than normal blood pressure.", now: "Drink water. Lie down and elevate legs.", help: "Emergency help if you lose consciousness.", tips: "Stay hydrated, don't skip meals." },
+            am: { sum: "ከመደበኛ በታች የሆነ የደም ግፊት።", now: "ውሃ ይጠጡ። ጋደም ብለው እግርዎን ከፍ ያድርጉ።", help: "ራስን መሳት ካጋጠመ ፈጣን እርዳታ ያግኙ።", tips: "በቂ ውሃ ይጠጡ፤ ምግብ አያሳልፉ።" },
+            ti: { sum: "ካብ ንቡር ንታሕቲ ዝኾነ ጸቕጢ ደም።", now: "ማይ ስተዩ። ደቂስኩም እግርኹም ኣልዕሉ።", help: "ርእስኹም እንተስሒትኩም ህጹጽ ረድኤት ደልዩ።", tips: "ብዙሕ ማይ ስተዩ፣ መግቢ ኣይተሕልፉ።" }
+        },
+        "NO ABNORMALITIES DETECTED": {
+            en: { sum: "No major clinical abnormalities point to tracked conditions.", now: "Continue normal routine.", help: "Consult a doctor if new symptoms appear.", tips: "Maintain a balanced lifestyle." },
+            am: { sum: "ምንም አይነት ከባድ የጤና ችግር አልተገኘም።", now: "የዕለት ተዕለት እንቅስቃሴዎን ይቀጥሉ።", help: "አዲስ ምልክት ከታየ ሐኪም ያማክሩ።", tips: "ጤናማ አኗኗርን ይከተሉ።" },
+            ti: { sum: "ዋላ ሓደ ከቢድ ናይ ጥዕና ጸገም ኣይተረኽበን።", now: "ስሩዕ ናብራኹም ቀጽሉ።", help: "ሓዱሽ ምልክት እንተተራእዩ ሓኪም ርኸቡ።", tips: "ጥዑይ ኣነባብራ ተኸተሉ።" }
+        },
+        "INSUFFICIENT DATA": {
+            en: { sum: "Not enough data to analyze reliably.", now: "Please provide more specific symptoms.", help: "Visit a doctor if you feel unwell.", tips: "Listen to your body." },
+            am: { sum: "በቂ መረጃ አልተሰጠም።", now: "እባክዎ ትክክለኛ ምልክቶችን ያስገቡ።", help: "ህመም ከተሰማዎ ወደ ሐኪም ይሂዱ።", tips: "የጤናዎን ሁኔታ በቅርበት ይከታተሉ።" },
+            ti: { sum: "እኹል ሓበሬታ ኣይተዋህበን።", now: "በጃኹም ትክክለኛ ምልክታት ኣእትዉ።", help: "ሕማም እንተተሰሚዑኩም ናብ ሓኪም ኪዱ።", tips: "ኩነታት ጥዕናኹም ተከታተሉ።" }
+        }
+    };
+
+  async function navigate(dir) {
+    const nameInput = document.getElementById('name');
+
+    if (currentStep === 1 && dir === 1 && !nameInput?.value) {
+        alert("Please enter patient name");
+        return;
+    }
+
+    if (currentStep === 6 && dir === 1) {
+        startAnalysisSequence();
+        return;
+    }
+
+    const prevId = `p${currentStep === 7 ? 'Result' : currentStep}`;
+    const prevEl = document.getElementById(prevId);
+
+    if (prevEl) prevEl.classList.remove('active');
+
+    currentStep += dir;
+
+    const nextId = `p${currentStep}`;
+    const nextEl = document.getElementById(nextId);
+
+    if (nextEl) nextEl.classList.add('active');
+
+    const backBtn = document.getElementById('backBtn');
+    if (backBtn) backBtn.style.display = currentStep === 1 ? 'none' : 'block';
+
+    const lang = localStorage.getItem('app_lang') || 'en';
+    const nextBtn = document.getElementById('nextBtn');
+
+    if (nextBtn) {
+        nextBtn.innerText =
+            currentStep === 6
+                ? TRANSLATIONS[lang].btn_analyze
+                : TRANSLATIONS[lang].btn_next;
+    }
+}
+    async function initWebcam() {
+        useWebcam = true;
+        document.getElementById('placeholder').style.display = 'none';
+        document.getElementById('img-preview').style.display = 'none';
+        document.getElementById('webcam-view').style.display = 'block';
+        webcam = new tmImage.Webcam(400, 400, true);
+        await webcam.setup();
+        await webcam.play();
+        document.getElementById("webcam-view").appendChild(webcam.canvas);
+        const loop = async () => { if(useWebcam) { webcam.update(); requestAnimationFrame(loop); } };
+        loop();
+    }
+
+    function previewImage(input) {
+        if(input.files[0]) {
+            useWebcam = false;
+            if(webcam) webcam.stop();
+            document.getElementById("placeholder").style.display = 'none';
+            document.getElementById("webcam-view").style.display = 'none';
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.getElementById('img-preview');
+                img.src = e.target.result;
+                img.style.display = 'block';
+                uploadedFile = img;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function extractClinicalData() {
+        let inputsP5 = document.querySelectorAll('#p5 input');
+        let selectsP2 = document.querySelectorAll('#p2 select');
+        
+        let data = {
+            continent: selectsP2[0]?.options[selectsP2[0].selectedIndex].text || "",
+            locType: selectsP2[1]?.options[selectsP2[1].selectedIndex].text || "",
+            alt: selectsP2[2]?.options[selectsP2[2].selectedIndex].text || "",
+            temp: parseFloat(inputsP5[0].value) || 36.6,
+            hr: parseFloat(inputsP5[1].value) || 75,
+            bp: inputsP5[2].value || "120/80",
+            symptoms: {},
+            history: []
+        };
+
+        document.querySelectorAll('#symp-box .selectable-card.selected').forEach(c => {
+            let key = c.dataset.key;
+            let mult = 1.0;
+            let dur = c.querySelector('select').selectedIndex; 
+            
+            if(dur === 0) mult = 1.0;
+            else if(dur === 1) mult = 1.2;
+            else if(dur === 2) mult = 1.5;
+            else mult = 2.0;
+
+            data.symptoms[key] = mult;
+        });
+
+        document.querySelectorAll('#hist-box .selectable-card.selected').forEach(c => {
+            data.history.push(c.dataset.key);
+        });
+
+        return data;
+    }
+
+    function calculateClinicalScores(data) {
+        let cScores = { Malaria: 0, Tuberculosis: 0, Typhoid: 0, Anemia: 0, Hypotension: 0 };
+        
+        let bpSys = 120, bpDia = 80;
+        if(data.bp.includes('/')) {
+            let pts = data.bp.split('/');
+            bpSys = parseInt(pts[0]) || 120;
+            bpDia = parseInt(pts[1]) || 80;
+        }
+
+        if(data.symptoms["fever"]) cScores["Malaria"] += 0.30 * data.symptoms["fever"];
+        if(data.symptoms["chills"]) cScores["Malaria"] += 0.25 * data.symptoms["chills"];
+        if(data.symptoms["sweating"]) cScores["Malaria"] += 0.20 * data.symptoms["sweating"];
+        if(data.continent.includes("Africa") || data.continent.includes("አፍሪካ") || data.continent.includes("ኣፍሪቃ")) cScores["Malaria"] += 0.20; 
+        if(data.temp > 38.0) cScores["Malaria"] += 0.35; 
+
+        if(data.symptoms["cough"]) cScores["Tuberculosis"] += 0.40 * data.symptoms["cough"]; 
+        if(data.symptoms["weight loss"]) cScores["Tuberculosis"] += 0.30 * data.symptoms["weight loss"];
+        if(data.history.includes("tuberculosis")) cScores["Tuberculosis"] += 0.30;
+
+        if(data.symptoms["fatigue"]) cScores["Anemia"] += 0.35 * data.symptoms["fatigue"];
+        if(data.symptoms["dizziness"]) cScores["Anemia"] += 0.25 * data.symptoms["dizziness"];
+        if(data.symptoms["weakness"]) cScores["Anemia"] += 0.25 * data.symptoms["weakness"];
+
+        if(data.symptoms["abdominal pain"]) cScores["Typhoid"] += 0.35 * data.symptoms["abdominal pain"];
+        if(data.symptoms["fever"]) cScores["Typhoid"] += 0.30 * data.symptoms["fever"];
+        if(data.symptoms["diarrhea"]) cScores["Typhoid"] += 0.25 * data.symptoms["diarrhea"];
+
+        if(bpSys < 90 || bpDia < 60) cScores["Hypotension"] += 0.70; 
+        if(data.symptoms["dizziness"]) cScores["Hypotension"] += 0.30 * data.symptoms["dizziness"];
+
+        Object.keys(cScores).forEach(k => cScores[k] = Math.min(cScores[k], 1.0));
+        return cScores;
+    }
+
+    function resolveDiagnostic(data, imagePreds, hasImage) {
+        let sympCount = Object.keys(data.symptoms).length;
+        let cScores = calculateClinicalScores(data);
+        
+        if (!hasImage && sympCount === 0 && data.temp < 37.5 && data.bp === "120/80") {
+            return { disease: "INSUFFICIENT DATA", score: 0, status: "No Data" };
+        }
+
+        let imgScores = { Malaria: 0, Tuberculosis: 0, Typhoid: 0, Anemia: 0, Hypotension: 0 };
+        
+        if (hasImage && imagePreds && imagePreds.length > 0) {
+            imagePreds.forEach(pred => {
+                let pClass = pred.className.toLowerCase();
+                let prob = pred.probability;
+                if(pClass.includes("malaria") || pClass.includes("plasmodium")) imgScores["Malaria"] += prob;
+                if(pClass.includes("tb") || pClass.includes("tuberculosis")) imgScores["Tuberculosis"] += prob;
+                if(pClass.includes("anemia")) imgScores["Anemia"] += prob;
+                if(pClass.includes("positive") && !pClass.includes("malaria") && !pClass.includes("tb")) {
+                    Object.keys(imgScores).forEach(k => imgScores[k] += (prob * 0.2)); 
+                }
+            });
+        }
+
+        let finalScores = {};
+        ["Malaria", "Tuberculosis", "Typhoid", "Anemia", "Hypotension"].forEach(d => {
+            let iScore = imgScores[d] || 0;
+            let cScore = cScores[d] || 0;
+            let fScore = hasImage ? (["Malaria", "Tuberculosis", "Anemia"].includes(d) ? (iScore * 0.85) + (cScore * 0.15) : (iScore * 0.70) + (cScore * 0.30)) : cScore;
+            finalScores[d] = Math.min(fScore, 0.99); 
+        });
+
+        let sorted = Object.keys(finalScores).map(k => ({disease: k, score: finalScores[k]})).sort((a,b) => b.score - a.score);
+        let top = sorted[0];
+
+        if (top.score <= 0.15) return { disease: "NO ABNORMALITIES DETECTED", score: top.score, status: "Healthy" };
+        return { disease: top.disease, score: top.score, status: top.score >= 0.80 ? "High Confidence" : "Moderate Confidence" };
+    }
+
+    function applyResultToUI(result) {
+        const lang = localStorage.getItem('app_lang') || 'en';
+        let { disease, score, status } = result;
+        
+        document.getElementById('res-prob').innerText = Math.round(score * 100) + "% " + TRANSLATIONS[lang].conf_level;
+        document.getElementById('drug-list').innerHTML = (TREATMENTS[disease] || TREATMENTS["INSUFFICIENT DATA"]).drugs;
+        
+        updateAdviceUI(disease, status, lang);
+    }
+
+    async function startAnalysisSequence() {
+        document.getElementById('analyze-overlay').style.display = 'flex';
+        
+        let clinicalData = extractClinicalData();
+        let imagePreds = null;
+        let hasImage = false;
+
+        if(model && (useWebcam || uploadedFile)) {
+            hasImage = true;
+            let imgElement = useWebcam ? webcam.canvas : uploadedFile;
+            imagePreds = await model.predict(imgElement);
+        }
+
+        setTimeout(() => {
+            let finalResult = resolveDiagnostic(clinicalData, imagePreds, hasImage);
+            document.getElementById('analyze-overlay').style.display = 'none';
+            applyResultToUI(finalResult);
+            
+            document.getElementById('p6').classList.remove('active');
+            currentStep = 7; 
+            document.getElementById('pResult').classList.add('active');
+            document.getElementById('backBtn').style.display = 'none';
+            document.getElementById('nextBtn').style.display = 'none';
+        }, 2500); 
+    }
+</script>
+
+</body>
+</html>
