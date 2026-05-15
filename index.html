@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Assistant | Neural Analysis</title>
+
+    <script src="js/tf.min.js"></script>
+    <script src="js/teachablemachine-image.min.js"></script>
+    <script src="js/ort.min.js"></script>
+
+    <style>
+        :root {
+            --bg-cream: #FFFDF5;
+            --primary-blue: #00A3FF;
+            --light-blue: #E3F2FD;
+            --deep-navy: #1A237E;
+            --white: #ffffff;
+            --radius: 24px;
+            --shadow: 0 12px 40px rgba(0, 163, 255, 0.1);
+            --text-color: #555;
+            transition: all 0.4s ease;
+        }
+
+        :root[data-theme="dark"] {
+            --bg-cream: #121212;
+            --primary-blue: #9b51e0;
+            --light-blue: #2d2d3a;
+            --deep-navy: #ffffff;
+            --white: #1e1e24;
+            --shadow: 0 12px 40px rgba(155, 81, 224, 0.15);
+            --text-color: #cccccc;
+        }
+
+        body {
+            background-color: var(--bg-cream);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: var(--deep-navy);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            width: 100%;
+            max-width: 480px;
+            background: var(--white);
+            margin: 15px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            height: 94vh;
+        }
+
+        header { padding: 20px 20px 15px 20px; border-bottom: 1px solid var(--light-blue); }
+        .top-nav { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+
+        .gear-btn {
+            background: var(--light-blue); color: var(--primary-blue); border: none;
+            border-radius: 14px; width: 45px; height: 45px; font-size: 22px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: 0.3s; box-shadow: 0 4px 10px rgba(0, 163, 255, 0.1);
+        }
+        .gear-btn:hover { background: var(--primary-blue); color: var(--white); transform: rotate(45deg); }
+
+        .header-center { display: flex; flex-direction: column; align-items: center; text-align: center; flex: 1; }
+        .logo { font-size: 36px; margin-bottom: 5px; }
+        .brand-text h1 { margin: 0; font-size: 20px; color: var(--deep-navy); }
+        .brand-text span { font-size: 9px; color: var(--primary-blue); font-weight: 800; letter-spacing: 1.5px; }
+        .nav-spacer { width: 45px; }
+
+        .modal-overlay {
+            position: absolute; inset: 0; background: rgba(26, 35, 126, 0.4); z-index: 3000;
+            display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px);
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show { display: flex; opacity: 1; }
+        .modal-content {
+            background: var(--white); padding: 30px; border-radius: var(--radius); width: 80%;
+            text-align: center; box-shadow: var(--shadow); border: 2px solid var(--light-blue);
+            transform: translateY(20px); animation: slideUp 0.4s ease forwards;
+            max-height: 80vh; overflow-y: auto;
+        }
+        .modal-content::-webkit-scrollbar { width: 6px; }
+        .modal-content::-webkit-scrollbar-thumb { background: var(--light-blue); border-radius: 10px; }
+        .modal-content h3 { margin: 0 0 15px 0; color: var(--deep-navy); font-size: 20px; }
+
+        .about-toggle-btn {
+            background: var(--light-blue); color: var(--primary-blue); border: none; padding: 12px;
+            width: 100%; border-radius: 14px; font-weight: 800; font-size: 14px; cursor: pointer;
+            transition: 0.3s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 15px;
+        }
+        .about-toggle-btn:hover { background: var(--primary-blue); color: var(--white); }
+
+        .close-btn {
+            background: var(--primary-blue); color: white; padding: 12px 25px; border: none;
+            border-radius: 14px; font-weight: 800; cursor: pointer; transition: 0.3s; width: 100%; margin-top: 15px;
+        }
+        .close-btn:hover { opacity: 0.9; transform: translateY(-2px); }
+
+        main { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; }
+        .page { display: none; animation: fadeIn 0.4s ease; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { to { transform: translateY(0); } }
+
+        h2 { font-size: 20px; margin-bottom: 15px; border-left: 4px solid var(--primary-blue); padding-left: 10px; color: var(--deep-navy); }
+
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-size: 12px; font-weight: 800; margin-bottom: 6px; color: var(--primary-blue); text-transform: uppercase; }
+        input, select {
+            width: 100%; padding: 14px; border-radius: 16px; border: 2px solid var(--light-blue);
+            font-size: 16px; outline: none; box-sizing: border-box; transition: 0.3s;
+            background: var(--white); color: var(--deep-navy);
+        }
+        input:focus, select:focus { border-color: var(--primary-blue); }
+
+        .search-container { position: sticky; top: 0; background: var(--white); z-index: 10; padding-bottom: 10px; }
+        .grid-container { display: grid; gap: 10px; }
+        .selectable-card {
+            background: var(--bg-cream); border: 2px solid #F0F4F8; border-radius: 18px; padding: 15px;
+            cursor: pointer; transition: 0.3s; color: var(--deep-navy);
+        }
+        :root[data-theme="dark"] .selectable-card { border-color: #333; }
+        .selectable-card.selected { border-color: var(--primary-blue); background: var(--light-blue); }
+        .duration-ui { margin-top: 10px; display: none; }
+        .selectable-card.selected .duration-ui { display: block; }
+
+        .preview-box {
+            width: 100%; aspect-ratio: 1/1; background: var(--light-blue); border-radius: 20px;
+            overflow: hidden; margin-bottom: 15px; border: 2px solid var(--light-blue);
+            position: relative;
+        }
+        #webcam-view, #img-preview { width: 100%; height: 100%; object-fit: cover; }
+        .placeholder-icon {
+            position: absolute; inset: 0; display: flex; align-items: center;
+            justify-content: center; font-size: 70px; color: #ccc; flex-direction: column;
+        }
+
+        .overlay {
+            position: absolute; inset: 0; background: var(--white); z-index: 2000;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center;
+        }
+        .neural-loader { position: relative; width: 120px; height: 120px; margin-bottom: 30px; }
+        .neural-circle {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 100%; height: 100%; border: 4px solid var(--primary-blue); border-radius: 50%;
+            opacity: 0; animation: neuralPulse 2s cubic-bezier(0.21, 0.53, 0.56, 0.8) infinite;
+        }
+        .neural-circle:nth-child(2) { animation-delay: 0.6s; }
+        .neural-circle:nth-child(3) { animation-delay: 1.2s; }
+        .neural-core {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 40px; height: 40px; background: var(--primary-blue); border-radius: 50%;
+            box-shadow: 0 0 20px var(--primary-blue); display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 20px; z-index: 2;
+        }
+        @keyframes neuralPulse {
+            0% { width: 40px; height: 40px; opacity: 1; border-width: 8px; }
+            100% { width: 140px; height: 140px; opacity: 0; border-width: 1px; }
+        }
+        .analysis-text { font-size: 22px; font-weight: 700; color: var(--deep-navy); letter-spacing: 0.5px; }
+        .analysis-sub { font-size: 12px; color: var(--primary-blue); font-weight: 800; margin-top: 8px; letter-spacing: 2px; text-transform: uppercase; }
+
+        .result-box { background: var(--light-blue); border-radius: 20px; padding: 25px; text-align: center; }
+        .med-advice { background: var(--bg-cream); padding: 15px; border-radius: 15px; margin-top: 15px; text-align: left; border: 1px solid var(--light-blue); }
+        .human-advice { display: flex; flex-direction: column; gap: 8px; }
+        .human-advice h4 { font-size: 13px; color: var(--primary-blue); margin: 10px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--light-blue); padding-bottom: 4px; }
+        .human-advice p { font-size: 14px; color: var(--deep-navy); line-height: 1.5; margin: 0; }
+        .human-advice ul { margin: 5px 0; padding-left: 20px; font-size: 14px; color: var(--deep-navy); line-height: 1.5; }
+
+        /* FIX: footer uses flex layout matching app-shell column design */
+        footer { padding: 20px; display: flex; gap: 10px; border-top: 1px solid var(--light-blue); background: var(--white); flex-shrink: 0; }
+        .btn { flex: 1; padding: 16px; border-radius: 18px; border: none; font-weight: 800; cursor: pointer; transition: 0.3s; }
+        .btn-next { background: var(--primary-blue); color: white; }
+        .btn-next:disabled { background: #b0bec5; cursor: not-allowed; }
+        .btn-back { background: var(--light-blue); color: var(--deep-navy); }
+
+        .fusion-metrics { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0; }
+        .source-badge { background: var(--deep-navy); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 800; letter-spacing: 1px; }
+        .confidence-bar-bg { width: 100%; height: 8px; background: var(--light-blue); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+        .confidence-bar-fill { height: 100%; transition: width 0.6s ease; width: 0%; }
+        .conf-high { background: #00E676; }
+        .conf-medium { background: #FFD54F; }
+        .conf-low { background: #FF5252; }
+        .text-healthy { color: #00C853 !important; text-shadow: 0 4px 15px rgba(0, 200, 83, 0.2); }
+
+        .conf-level-badge {
+            display: inline-block; padding: 5px 14px; border-radius: 20px;
+            font-size: 11px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase;
+            margin-right: 6px;
+        }
+        .conf-level-badge.HIGH  { background: rgba(0,230,118,0.15); color: #00C853; border: 1.5px solid #00E676; }
+        .conf-level-badge.MEDIUM{ background: rgba(255,213,79,0.15); color: #F9A825; border: 1.5px solid #FFD54F; }
+        .conf-level-badge.LOW   { background: rgba(255,82,82,0.15);  color: #D32F2F; border: 1.5px solid #FF5252; }
+
+        .source-badge.SRC-ONNX  { background: #1A237E; }
+        .source-badge.SRC-IMAGE { background: #00838F; }
+        .source-badge.SRC-FUSED { background: #6A1B9A; }
+        :root[data-theme="dark"] .source-badge.SRC-ONNX  { background: #5C6BC0; }
+        :root[data-theme="dark"] .source-badge.SRC-IMAGE { background: #00ACC1; }
+        :root[data-theme="dark"] .source-badge.SRC-FUSED { background: #AB47BC; }
+
+        .conf-score-num { font-size: 13px; font-weight: 800; color: var(--text-color); margin-top: 4px; }
+
+        .recommendation-box {
+            background: var(--bg-cream); border-left: 4px solid var(--primary-blue);
+            border-radius: 12px; padding: 12px 15px; margin-top: 14px; font-size: 13px;
+            color: var(--deep-navy); line-height: 1.5; text-align: left;
+        }
+        .recommendation-box.rec-low { border-left-color: #FF5252; }
+        .recommendation-box.rec-medium { border-left-color: #FFD54F; }
+        .recommendation-box.rec-high { border-left-color: #00E676; }
+
+        .prob-breakdown { margin-top: 14px; border-radius: 14px; overflow: hidden; border: 1.5px solid var(--light-blue); }
+        .prob-breakdown-header {
+            background: var(--light-blue); padding: 8px 14px;
+            font-size: 10px; font-weight: 900; letter-spacing: 1.5px; color: var(--primary-blue);
+            text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;
+        }
+        .prob-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 9px 14px; border-top: 1px solid var(--light-blue);
+            background: var(--white); font-size: 13px; gap: 10px;
+        }
+        .prob-row-label { font-weight: 700; color: var(--deep-navy); min-width: 50px; }
+        .prob-row-disease { color: var(--text-color); flex: 1; font-size: 12px; }
+        .prob-row-bar-bg { flex: 1; height: 6px; background: var(--light-blue); border-radius: 3px; overflow: hidden; }
+        .prob-row-bar-fill { height: 100%; border-radius: 3px; transition: width 0.7s ease; }
+        .prob-row-pct { font-weight: 800; font-size: 12px; min-width: 40px; text-align: right; color: var(--primary-blue); }
+        .prob-unavail { padding: 10px 14px; font-size: 12px; color: var(--text-color); background: var(--white); border-top: 1px solid var(--light-blue); }
+
+        .debug-toggle-btn {
+            background: none; border: 1.5px dashed var(--light-blue); color: var(--text-color);
+            border-radius: 10px; padding: 6px 14px; font-size: 11px; font-weight: 700;
+            cursor: pointer; margin-top: 12px; width: 100%; transition: 0.2s;
+        }
+        .debug-toggle-btn:hover { border-color: var(--primary-blue); color: var(--primary-blue); }
+        .debug-panel {
+            display: none; background: #0d1117; border-radius: 12px; padding: 14px;
+            margin-top: 8px; font-family: 'Courier New', monospace; font-size: 11px;
+            color: #58a6ff; line-height: 1.7; overflow-x: auto; white-space: pre-wrap;
+            word-break: break-all;
+        }
+        :root[data-theme="dark"] .debug-panel { background: #000; color: #7ee787; }
+
+        .model-status-row { display: flex; gap: 10px; margin-top: 18px; justify-content: center; }
+        .model-dot {
+            display: flex; align-items: center; gap: 5px; font-size: 11px;
+            font-weight: 800; letter-spacing: 0.5px; color: var(--text-color);
+        }
+        .model-dot::before {
+            content: ''; width: 8px; height: 8px; border-radius: 50%;
+            background: #FFD54F; display: inline-block;
+            animation: dotPulse 1s ease-in-out infinite alternate;
+        }
+        .model-dot.ok::before  { background: #00E676; animation: none; }
+        .model-dot.err::before { background: #FF5252; animation: none; }
+        @keyframes dotPulse { from { opacity: 0.3; } to { opacity: 1; } }
+
+        #pResult { animation: fadeIn 0.5s ease; }
+        @keyframes resultSlideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .fusion-animate { animation: resultSlideIn 0.5s ease both; }
+
+        .csv-section-heading {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 11px; font-weight: 900; color: var(--primary-blue);
+            letter-spacing: 1.8px; text-transform: uppercase;
+            margin: 22px 0 12px 0; padding: 8px 12px;
+            background: var(--light-blue); border-radius: 12px;
+            border-left: 4px solid var(--primary-blue);
+        }
+        .csv-section-heading .sh-icon { font-size: 16px; }
+        .csv-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+        .csv-grid-1 { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 4px; }
+        .input-hint { font-size: 10px; color: var(--text-color); margin-top: 3px; font-style: italic; padding-left: 4px; }
+        .csv-field-divider { height: 1px; background: var(--light-blue); margin: 16px 0; border: none; }
+        .validation-msg { display: none; font-size: 10px; color: #FF5252; font-weight: 700; margin-top: 3px; padding-left: 4px; }
+        input.csv-input, select.csv-select {
+            width: 100%; padding: 14px; border-radius: 16px;
+            border: 2px solid var(--light-blue); font-size: 15px;
+            outline: none; box-sizing: border-box; transition: 0.3s;
+            background: var(--white); color: var(--deep-navy);
+        }
+        input.csv-input:focus, select.csv-select:focus {
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(0,163,255,0.08);
+        }
+        :root[data-theme="dark"] input.csv-input,
+        :root[data-theme="dark"] select.csv-select { background: var(--white); color: var(--deep-navy); }
+
+        .ai-explanation-box {
+            background: linear-gradient(135deg,rgba(0,163,255,.04) 0%,rgba(106,27,154,.04) 100%);
+            border: 1.5px solid var(--primary-blue); border-radius: 16px;
+            padding: 18px; margin-top: 14px; position: relative; overflow: hidden;
+        }
+        .ai-explanation-box::before {
+            content:''; position:absolute; top:0; left:0; right:0; height:3px;
+            background:linear-gradient(90deg,#00A3FF,#6A1B9A,#00A3FF);
+            background-size:200% 100%; animation:aiGrad 3s ease infinite;
+        }
+        @keyframes aiGrad{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+        .ai-explanation-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;
+            font-size:10px;font-weight:900;letter-spacing:1.8px;color:var(--primary-blue);text-transform:uppercase;}
+        .ai-loading{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-color);padding:4px 0;}
+        .ai-dot{width:7px;height:7px;border-radius:50%;background:var(--primary-blue);flex-shrink:0;
+            animation:aiDP 1.4s ease-in-out infinite;}
+        .ai-dot:nth-child(2){animation-delay:.2s}.ai-dot:nth-child(3){animation-delay:.4s}
+        @keyframes aiDP{0%,80%,100%{transform:scale(0.4);opacity:.4}40%{transform:scale(1);opacity:1}}
+        .ai-formatted{display:flex;flex-direction:column;gap:10px;}
+        .ai-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;}
+        .ai-lbl{font-weight:900;color:var(--primary-blue);white-space:nowrap;min-width:88px;
+            font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding-top:2px;}
+        .ai-val{color:var(--deep-navy);line-height:1.6;flex:1;}
+        .ai-hr{height:1px;background:var(--light-blue);margin:2px 0;}
+        .section-pill{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:900;
+            color:white;text-transform:uppercase;letter-spacing:1.5px;
+            background:var(--primary-blue);padding:4px 12px;border-radius:20px;margin-bottom:8px;}
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+
+    <!-- SETTINGS MODAL -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-content">
+            <h3 data-i18n="settings_title">Settings</h3>
+            <div class="input-group" style="text-align: left;">
+                <label data-i18n="language_label">Language</label>
+                <select id="lang-select" onchange="changeLanguage(this.value)">
+                    <option value="en">English 🇬🇧</option>
+                    <option value="am">Amharic 🇪🇹</option>
+                    <option value="ti">Tigrigna 🇪🇷/🇪🇹</option>
+                </select>
+            </div>
+            <div class="input-group" style="text-align: left; margin-bottom: 5px;">
+                <label data-i18n="theme_label">Theme Mode</label>
+                <select id="theme-select" onchange="changeTheme(this.value)">
+                    <option value="light" data-i18n="light_mode">Light Mode ☀️</option>
+                    <option value="dark" data-i18n="dark_mode">Dark Mode 🌙</option>
+                </select>
+            </div>
+
+            <button class="about-toggle-btn" onclick="toggleAbout()">ℹ️ <span data-i18n="about_title">About App</span></button>
+
+            <div id="about-expanded" style="display: none; text-align: left; font-size: 13px; color: var(--text-color); line-height: 1.6; margin-top: 15px; padding: 15px; background: var(--bg-cream); border-radius: 12px; border: 1px solid var(--light-blue);">
+                <strong data-i18n="app_name_label">App Name:</strong> <span data-i18n="app_name_val">AI Medical Assistant</span><br>
+                <strong data-i18n="version_label">Version:</strong> <span data-i18n="version_val">2.0.1 (Neural Edge)</span><br><br>
+                <strong data-i18n="purpose_label">Purpose:</strong> <span data-i18n="purpose_val">AI-powered symptom and image-based medical support system.</span><br><br>
+                <strong data-i18n="desc_label">Description:</strong> <span data-i18n="desc_val">Combines Teachable Machine visual recognition with a clinical reasoning system. Runs entirely offline after initial load.</span><br><br>
+                <strong data-i18n="privacy_label">Privacy:</strong> <span data-i18n="privacy_val">No data is stored externally. Your camera feed and measurements remain on your device.</span>
+                <div style="background: rgba(255,71,87,0.1); padding: 10px; border-left: 3px solid #ff4757; margin-top: 15px; border-radius: 4px; font-size: 12px;">
+                    <strong style="color: #ff4757;" data-i18n="disclaimer_label">Disclaimer:</strong><br>
+                    <span style="color: #ff4757;" data-i18n="disclaimer_val">Not a replacement for doctors. Not medically certified. Only an educational support tool.</span>
+                </div>
+            </div>
+
+            <button class="close-btn" onclick="closeSettings()" data-i18n="btn_save">Save & Close</button>
+        </div>
+    </div>
+
+    <!-- ANALYZING OVERLAY -->
+    <div class="overlay" id="analyze-overlay">
+        <div class="neural-loader">
+            <div class="neural-circle"></div>
+            <div class="neural-circle"></div>
+            <div class="neural-circle"></div>
+            <div class="neural-core">🧠</div>
+        </div>
+        <div class="analysis-text" data-i18n="analyzing">Neural Analysis</div>
+        <div class="analysis-sub" data-i18n="processing">Processing Bio-Data</div>
+        <div class="model-status-row">
+            <div class="model-dot" id="dot-image">IMAGE MODEL</div>
+            <div class="model-dot" id="dot-onnx">ONNX MODEL</div>
+        </div>
+    </div>
+
+    <header>
+        <div class="top-nav">
+            <div class="nav-spacer"></div>
+            <div class="header-center">
+                <div class="logo">👨‍⚕️</div>
+                <div class="brand-text">
+                    <h1 data-i18n="app_title">Doctor Assistant</h1>
+                    <span data-i18n="app_subtitle">NEURAL DIAGNOSTIC SYSTEM</span>
+                </div>
+            </div>
+            <button class="gear-btn" onclick="openSettings()">⚙️</button>
+        </div>
+    </header>
+
+    <main id="flow">
+
+        <!-- PAGE 1: Patient Profile -->
+        <section class="page active" id="p1">
+            <h2 data-i18n="step1_title">Patient Profile</h2>
+            <div class="input-group"><label data-i18n="full_name">Full Name</label><input type="text" id="name" data-i18n-ph="ph_name" placeholder="Name"></div>
+            <div class="input-group"><label data-i18n="age">Age</label><input type="number" id="age" placeholder="18"></div>
+            <div class="input-group">
+                <label data-i18n="sex">Sex</label>
+                <select id="sex">
+                    <option data-i18n="male">Male</option>
+                    <option data-i18n="female">Female</option>
+                    <option data-i18n="other">Other</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- PAGE 2: Environment -->
+        <section class="page" id="p2">
+            <h2 data-i18n="step2_title">Environment</h2>
+            <div class="input-group">
+                <label data-i18n="continent">Continent</label>
+                <select id="continent">
+                    <option data-i18n="cont_af">Africa</option>
+                    <option data-i18n="cont_as">Asia</option>
+                    <option selected data-i18n="cont_eu">Europe</option>
+                    <option data-i18n="cont_na">North America</option>
+                    <option data-i18n="cont_sa">South America</option>
+                    <option data-i18n="cont_au">Australia</option>
+                </select>
+            </div>
+            <div class="input-group"><label data-i18n="loc_type">Location Type</label><select id="locType"><option data-i18n="urban">Urban</option><option data-i18n="rural">Rural</option></select></div>
+            <div class="input-group"><label data-i18n="altitude">Altitude</label><select id="alt"><option data-i18n="lowland">Lowland</option><option data-i18n="highland">Highland</option></select></div>
+        </section>
+
+        <!-- PAGE 3: Symptoms -->
+        <section class="page" id="p3">
+            <h2 data-i18n="step3_title">Symptoms</h2>
+            <div class="search-container">
+                <input type="text" id="sympSearch" data-i18n-ph="ph_symp" placeholder="🔍 Search symptoms..." onkeyup="filterItems('sympSearch', 'symp-box')">
+            </div>
+            <div class="grid-container" id="symp-box"></div>
+        </section>
+
+        <!-- PAGE 4: Medical History -->
+        <section class="page" id="p4">
+            <h2 data-i18n="step4_title">Medical History</h2>
+            <div class="search-container">
+                <input type="text" id="histSearch" data-i18n-ph="ph_hist" placeholder="🔍 Search history..." onkeyup="filterItems('histSearch', 'hist-box')">
+            </div>
+            <div class="grid-container" id="hist-box"></div>
+        </section>
+
+        <!-- PAGE 5: Physical Measurements + CSV Blood Panel -->
+        <section class="page" id="p5">
+            <h2 data-i18n="step5_title">Physical Measurements</h2>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div class="input-group"><label data-i18n="temp">Temp (°C)</label><input type="number" step="0.1" value="36.6" id="tempValue"></div>
+                <div class="input-group"><label data-i18n="heartbeat">Heartbeat</label><input type="number" value="75"></div>
+                <div class="input-group"><label data-i18n="bp">Blood Pressure</label><input type="text" placeholder="120/80" id="bpValue"></div>
+                <div class="input-group"><label data-i18n="oxygen">Oxygen (%)</label><input type="number" value="98"></div>
+                <div class="input-group"><label data-i18n="weight">Weight (kg)</label><input type="number" placeholder="70"></div>
+                <div class="input-group"><label data-i18n="height">Height (cm)</label><input type="number" placeholder="175"></div>
+                <div class="input-group"><label data-i18n="blood_sugar">Blood Sugar (mg/dL)</label><input type="number" placeholder="90"></div>
+                <div class="input-group"><label data-i18n="resp_rate">Respiration Rate</label><input type="number" placeholder="16"></div>
+            </div>
+
+            <div class="csv-section-heading"><span class="sh-icon">🩸</span> Blood Panel (CBC)</div>
+            <div class="csv-grid-2">
+                <div class="input-group"><label>Hemoglobin (g/dL)</label><input class="csv-input" type="number" step="0.01" min="0" max="25" id="csv_hemoglobin" placeholder="e.g. 13.5"><div class="input-hint">Normal: 12–17 g/dL</div></div>
+                <div class="input-group"><label>WBC Count (/µL)</label><input class="csv-input" type="number" min="0" max="100000" id="csv_wbc_count" placeholder="e.g. 7000"><div class="input-hint">Normal: 4,500–11,000</div></div>
+                <div class="input-group"><label>Platelet Count (/µL)</label><input class="csv-input" type="number" min="0" max="1000000" id="csv_platelet_count" placeholder="e.g. 250000"><div class="input-hint">Normal: 150,000–400,000</div></div>
+                <div class="input-group"><label>MCH (pg)</label><input class="csv-input" type="number" step="0.01" min="0" max="50" id="csv_mch" placeholder="e.g. 27.5"><div class="input-hint">Normal: 27–33 pg</div></div>
+                <div class="input-group"><label>MCHC (g/dL)</label><input class="csv-input" type="number" step="0.01" min="0" max="40" id="csv_mchc" placeholder="e.g. 33.0"><div class="input-hint">Normal: 32–36 g/dL</div></div>
+                <div class="input-group"><label>MCV (fL)</label><input class="csv-input" type="number" min="0" max="150" id="csv_mcv" placeholder="e.g. 90"><div class="input-hint">Normal: 80–100 fL</div></div>
+                <div class="input-group"><label>RDW-CV (%)</label><input class="csv-input" type="number" step="0.01" min="0" max="30" id="csv_rdw_cv" placeholder="e.g. 13.5"><div class="input-hint">Normal: 11.5–14.5%</div></div>
+                <div class="input-group"><label>Neutrophils (%)</label><input class="csv-input" type="number" min="0" max="100" id="csv_neutrophils" placeholder="e.g. 60"><div class="input-hint">Normal: 55–70%</div></div>
+                <div class="input-group"><label>Lymphocytes (%)</label><input class="csv-input" type="number" min="0" max="100" id="csv_lymphocytes" placeholder="e.g. 30"><div class="input-hint">Normal: 20–40%</div></div>
+                <div class="input-group"><label>Eosinophils (%)</label><input class="csv-input" type="number" min="0" max="50" id="csv_eosinophils" placeholder="e.g. 3"><div class="input-hint">Normal: 1–4%</div></div>
+                <div class="input-group" style="grid-column: 1 / -1;"><label>Hematocrit / PCV (%)</label><input class="csv-input" type="number" step="0.01" min="0" max="70" id="csv_hematocrit_pcv" placeholder="e.g. 42.0"><div class="input-hint">Normal: 36–52%</div></div>
+            </div>
+
+            <div class="csv-section-heading"><span class="sh-icon">🌡️</span> Infection &amp; Fever Markers</div>
+            <div class="csv-grid-2">
+                <div class="input-group"><label>Fever Duration (days)</label><input class="csv-input" type="number" min="0" max="30" id="csv_fever_duration_days" placeholder="e.g. 3"><div class="input-hint">How many days fever has persisted</div></div>
+                <div class="input-group"><label>Gastrointestinal Symptoms</label><select class="csv-select" id="csv_gastrointestinal_symptoms"><option value="0">None</option><option value="1">Abdominal Pain</option><option value="2">Constipation</option><option value="3">Diarrhea</option></select><div class="input-hint">Select dominant GI symptom</div></div>
+                <div class="input-group"><label>Neurological Symptoms</label><select class="csv-select" id="csv_neurological_symptoms"><option value="0">None</option><option value="1">Confusion</option><option value="2">Delirium</option><option value="3">Headache (severe)</option></select></div>
+                <div class="input-group"><label>Skin Manifestations</label><select class="csv-select" id="csv_skin_manifestations"><option value="0">No</option><option value="1">Yes (Rose spots / rash)</option></select></div>
+                <div class="input-group"><label>Complications</label><select class="csv-select" id="csv_complications"><option value="0">None</option><option value="1">Intestinal Perforation</option><option value="2">Sepsis</option><option value="3">Meningitis</option></select></div>
+                <div class="input-group"><label>Blood Culture Result</label><select class="csv-select" id="csv_blood_culture_result"><option value="0">Negative</option><option value="1">Positive</option></select></div>
+                <div class="input-group"><label>Widal Test</label><select class="csv-select" id="csv_widal_test"><option value="0">Low Titres</option><option value="1">High O&amp;H Antibody</option></select></div>
+                <div class="input-group"><label>Typhidot Test</label><select class="csv-select" id="csv_typhidot_test"><option value="0">Negative</option><option value="1">IgM Positive</option><option value="2">IgG Positive</option></select></div>
+            </div>
+
+            <div class="csv-section-heading"><span class="sh-icon">💊</span> Metabolic &amp; Diabetes Panel</div>
+            <div class="csv-grid-2">
+                <div class="input-group"><label>Pregnancies (#)</label><input class="csv-input" type="number" min="0" max="20" id="csv_pregnancies" placeholder="0"><div class="input-hint">Number of pregnancies</div></div>
+                <div class="input-group"><label>Glucose (mg/dL)</label><input class="csv-input" type="number" min="0" max="600" id="csv_glucose" placeholder="e.g. 100"><div class="input-hint">Fasting plasma glucose</div></div>
+                <div class="input-group"><label>Blood Pressure (mmHg)</label><input class="csv-input" type="number" min="0" max="200" id="csv_blood_pressure" placeholder="e.g. 80"><div class="input-hint">Diastolic reading</div></div>
+                <div class="input-group"><label>Skin Thickness (mm)</label><input class="csv-input" type="number" min="0" max="100" id="csv_skin_thickness" placeholder="e.g. 20"><div class="input-hint">Triceps skinfold</div></div>
+                <div class="input-group"><label>Insulin (µU/mL)</label><input class="csv-input" type="number" min="0" max="900" id="csv_insulin" placeholder="e.g. 79"><div class="input-hint">2-hr serum insulin</div></div>
+                <div class="input-group"><label>BMI (kg/m²)</label><input class="csv-input" type="number" step="0.1" min="0" max="70" id="csv_bmi" placeholder="e.g. 25.5"><div class="input-hint">Body Mass Index</div></div>
+                <div class="input-group" style="grid-column: 1 / -1;"><label>Diabetes Pedigree Function</label><input class="csv-input" type="number" step="0.001" min="0" max="3" id="csv_diabetes_pedigree_function" placeholder="e.g. 0.627"><div class="input-hint">Genetic diabetes risk score (0–2.5)</div></div>
+            </div>
+        </section>
+
+        <!-- PAGE 6: Lab Image -->
+        <section class="page" id="p6">
+            <h2 data-i18n="step6_title">Laboratory Test</h2>
+            <div class="preview-box">
+                <div class="placeholder-icon" id="placeholder">
+                    🧬🔬<span style="font-size:12px; font-weight:800; color:#aaa; margin-top:10px;" data-i18n="awaiting_sample">AWAITING SAMPLE</span>
+                </div>
+                <div id="webcam-view" style="display:none;"></div>
+                <img id="img-preview" style="display:none;">
+            </div>
+            <div style="display:grid; gap:10px; grid-template-columns:1fr 1fr;">
+                <button class="btn btn-back" onclick="initWebcam()">📷 <span data-i18n="camera">Camera</span></button>
+                <label class="btn btn-back" style="text-align:center;">📁 <span data-i18n="upload">Upload</span><input type="file" hidden accept="image/*" onchange="previewImage(this)"></label>
+            </div>
+        </section>
+
+        <!-- PAGE RESULT -->
+        <section class="page" id="pResult">
+            <div class="result-box">
+                <p style="font-size:12px; font-weight:800; color:var(--primary-blue);" data-i18n="neural_diag">NEURAL DIAGNOSIS</p>
+                <h1 id="res-disease" style="font-size:32px; margin:10px 0;">--</h1>
+                <div style="background:var(--primary-blue); color:white; display:none; padding:8px 20px; border-radius:20px; font-weight:800;" id="res-prob">0%</div>
+
+                <div id="fusion-container" style="display: none;">
+                    <div class="fusion-metrics">
+                        <span id="fusion-level" class="conf-level-badge"></span>
+                        <span id="fusion-source" class="source-badge"></span>
+                    </div>
+                    <div class="conf-score-num" id="conf-score-display"></div>
+                    <div class="confidence-bar-bg">
+                        <div id="fusion-bar" class="confidence-bar-fill"></div>
+                    </div>
+                </div>
+
+                <div id="recommendation-box" class="recommendation-box" style="display:none;"></div>
+            </div>
+
+            <!-- Probability breakdown -->
+            <div class="prob-breakdown fusion-animate" id="prob-breakdown" style="display:none; margin-top:14px;">
+                <div class="prob-breakdown-header">
+                    <span>📊 PROBABILITY BREAKDOWN</span>
+                    <span id="breakdown-source-lbl" style="font-size:9px; opacity:0.8;"></span>
+                </div>
+                <div id="prob-onnx-row"></div>
+                <div id="prob-image-row"></div>
+            </div>
+
+            <!-- Developer debug -->
+            <button class="debug-toggle-btn" id="debug-toggle-btn" onclick="toggleDebugPanel()" style="display:none;">🛠 Developer Debug</button>
+            <pre class="debug-panel" id="debug-panel"></pre>
+
+            <!-- AI Clinical Reasoning -->
+            <div id="ai-explanation-box" class="ai-explanation-box" style="display:none;">
+                <div class="ai-explanation-header">🤖 AI CLINICAL REASONING</div>
+                <div id="ai-explanation-content">
+                    <div class="ai-loading">
+                        <div class="ai-dot"></div>
+                        <div class="ai-dot"></div>
+                        <div class="ai-dot"></div>
+                        <span style="font-size:12px;">Generating clinical reasoning…</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FIX: med-advice div now has proper child elements with correct IDs -->
+            <div class="med-advice">
+                <p style="font-size:12px; font-weight:800; color:var(--primary-blue);" data-i18n="med_label">Sample Medications</p>
+                <div id="drug-list" style="font-size:14px; color:var(--deep-navy); line-height:1.8;"></div>
+                <p style="font-size:12px; font-weight:800; color:var(--primary-blue); margin-top:15px;" data-i18n="advice_label">Medical Advice</p>
+                <div id="advice-container"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FIX: Footer with navigation buttons (backBtn / nextBtn) was missing entirely -->
+    <footer>
+        <button class="btn btn-back" id="backBtn" style="display:none;" onclick="navigate(-1)" data-i18n="btn_back">Back</button>
+        <button class="btn btn-next" id="nextBtn" onclick="navigate(1)" data-i18n="btn_next">Next Step</button>
+    </footer>
+
+</div><!-- end app-shell -->
+
+<script>
+
+    // ── TRANSLATIONS ──────────────────────────────────────────────────
+    const TRANSLATIONS = {
+        en: {
+            app_title: "Doctor Assistant", app_subtitle: "NEURAL DIAGNOSTIC SYSTEM",
+            settings_title: "Settings", language_label: "Language", theme_label: "Theme Mode",
+            light_mode: "Light Mode ☀️", dark_mode: "Dark Mode 🌙", btn_save: "Save & Close",
+            about_title: "About App", app_name_label: "App Name:", app_name_val: "AI Medical Assistant",
+            version_label: "Version:", version_val: "2.0.1 (Neural Edge)",
+            purpose_label: "Purpose:", purpose_val: "AI-powered symptom and image-based medical support system.",
+            desc_label: "Description:", desc_val: "Combines Teachable Machine visual recognition with a clinical reasoning system.",
+            privacy_label: "Privacy:", privacy_val: "No data is stored externally.",
+            disclaimer_label: "Disclaimer:", disclaimer_val: "Not a replacement for doctors. Educational use only.",
+            step1_title: "Patient Profile", full_name: "Full Name", ph_name: "Name", age: "Age", sex: "Sex", male: "Male", female: "Female", other: "Other",
+            step2_title: "Environment", continent: "Continent", cont_af: "Africa", cont_as: "Asia", cont_eu: "Europe", cont_na: "North America", cont_sa: "South America", cont_au: "Australia",
+            loc_type: "Location Type", urban: "Urban", rural: "Rural", altitude: "Altitude", lowland: "Lowland", highland: "Highland",
+            step3_title: "Symptoms", ph_symp: "🔍 Search symptoms...", step4_title: "Medical History", ph_hist: "🔍 Search history...",
+            step5_title: "Physical Measurements", temp: "Temp (°C)", heartbeat: "Heartbeat", bp: "Blood Pressure", oxygen: "Oxygen (%)", weight: "Weight (kg)", height: "Height (cm)", blood_sugar: "Blood Sugar (mg/dL)", resp_rate: "Respiration Rate",
+            step6_title: "Laboratory Test", awaiting_sample: "AWAITING SAMPLE", camera: "Camera", upload: "Upload",
+            neural_diag: "NEURAL DIAGNOSIS", med_label: "Sample Medications", advice_label: "Medical Advice", new_patient: "New Patient",
+            btn_back: "Back", btn_next: "Next Step", btn_analyze: "Analyze", analyzing: "Neural Analysis", processing: "Processing Bio-Data",
+            conf_level: "Confidence", dur_label: "Duration",
+            h_summary: "🩺 Condition Summary", h_now: "💊 What You Can Do Now", h_help: "⚠️ When to Seek Help", h_tips: "🌿 General Care Tips",
+            dis_malaria: "Malaria", dis_tb: "Tuberculosis", dis_typhoid: "Typhoid", dis_anemia: "Anemia", dis_hypo: "Hypotension", dis_none: "NO ABNORMALITIES DETECTED", dis_insuf: "INSUFFICIENT DATA", dis_retake: "IMAGE ERROR",
+            s_fever: "Fever", s_headache: "Headache", s_fatigue: "Fatigue", s_chills: "Chills", s_cough: "Cough", s_nausea: "Nausea", s_vomiting: "Vomiting", s_diarrhea: "Diarrhea", s_muscle_pain: "Muscle Pain", s_joint_pain: "Joint Pain", s_skin_rash: "Skin Rash", s_sweating: "Sweating", s_loss_appetite: "Loss of Appetite", s_dizziness: "Dizziness", s_sore_throat: "Sore Throat", s_chest_pain: "Chest Pain", s_abd_pain: "Abdominal Pain", s_short_breath: "Shortness of Breath", s_weakness: "Weakness", s_nasal_cong: "Nasal Congestion", s_weight_loss: "Weight Loss",
+            h_malaria: "Malaria History", h_hyper: "Hypertension", h_t1d: "Type 1 Diabetes", h_t2d: "Type 2 Diabetes", h_asthma: "Asthma", h_heart: "Heart Disease", h_anemia: "Anemia", h_tb: "Tuberculosis", h_hiv: "HIV/AIDS", h_surgery: "Recent Surgery", h_pneumonia: "Pneumonia History", h_allergies: "Allergies", h_cancer: "Cancer History",
+            d1: "< 1 day", d2: "1–3 days", d3: "3–7 days", d4: "1–2 weeks", d5: "2–4 weeks", d6: "> 1 month"
+        },
+        am: {
+            app_title: "የሐኪም ረዳት", app_subtitle: "የኒውራል ምርመራ ስርዓት",
+            settings_title: "ቅንብሮች", language_label: "ቋንቋ", theme_label: "ገጽታ",
+            light_mode: "ብሩህ ገጽታ ☀️", dark_mode: "ጨለማ ገጽታ 🌙", btn_save: "አስቀምጥ",
+            about_title: "ስለ መተግበሪያው", app_name_label: "ስም:", app_name_val: "የህክምና ረዳት (AI)",
+            version_label: "ስሪት:", version_val: "2.0.1 (Neural Edge)",
+            purpose_label: "አላማ:", purpose_val: "የምልክ ትንተና ድጋፍ መሳሪያ",
+            desc_label: "መግለጫ:", desc_val: "ሰው ሰራሽ አስተውሎትን ከህክምና ማስረጃ ጋር ያጣምራል።",
+            privacy_label: "ግላዊነት:", privacy_val: "ምንም መረጃ ከስልክዎ አይወጣም።",
+            disclaimer_label: "ማስጠንቀቂያ:", disclaimer_val: "ትክክለኛ የህክምና መመርመሪያ መሳሪያ አይደለም። ለትምህርት ብቻ።",
+            step1_title: "የታካሚ መገለጫ", full_name: "ሙሉ ስም", ph_name: "ስም", age: "ዕድሜ", sex: "ፆታ", male: "ወንድ", female: "ሴት", other: "ሌላ",
+            step2_title: "አካባቢ", continent: "አህጉር", cont_af: "አፍሪካ", cont_as: "እስያ", cont_eu: "አውሮፓ", cont_na: "ሰሜን አሜሪካ", cont_sa: "ደቡብ አሜሪካ", cont_au: "አውስትራሊያ",
+            loc_type: "የአካባቢ አይነት", urban: "ከተማ", rural: "ገጠር", altitude: "ከፍታ", lowland: "ቆላ", highland: "ደጋ",
+            step3_title: "ምልክቶች", ph_symp: "🔍 ምልክቶችን ይፈልጉ...", step4_title: "የህክምና ታሪክ", ph_hist: "🔍 ታሪክ ይፈልጉ...",
+            step5_title: "አካላዊ ልኬቶች", temp: "ሙቀት (°C)", heartbeat: "የልብ ምት", bp: "የደም ግፊት", oxygen: "ኦክስጅን (%)", weight: "ክብደት (kg)", height: "ቁመት (cm)", blood_sugar: "የደም ስኳር", resp_rate: "የአተነፋፈስ ፍጥነት",
+            step6_title: "የላቦራቶሪ ምርመራ", awaiting_sample: "ናሙና በመጠበቅ ላይ", camera: "ካሜራ", upload: "ጫን",
+            neural_diag: "የምርመራ ውጤት", med_label: "መድሃኒቶች", advice_label: "የህክምና ምክር", new_patient: "አዲስ ታካሚ",
+            btn_back: "ተመለስ", btn_next: "ቀጣይ", btn_analyze: "ተንትን", analyzing: "ትንተና በመካሄድ ላይ", processing: "ዳታ በመሰራጨት ላይ",
+            conf_level: "እርግጠኝነት", dur_label: "ቆይታ",
+            h_summary: "🩺 ስለ ሁኔታው አጭር ማብራሪያ", h_now: "💊 አሁን ማድረግ የሚችሉት", h_help: "⚠️ መቼ እርዳታ ማግኘት እንዳለብዎ", h_tips: "🌿 አጠቃላይ የጤና ምክሮች",
+            dis_malaria: "ወባ", dis_tb: "የሳንባ ነቀርሳ", dis_typhoid: "ታይፎይድ", dis_anemia: "የደም ማነስ", dis_hypo: "ዝቅተኛ የደም ግፊት", dis_none: "ምንም ችግር አልተገኘም", dis_insuf: "በቂ መረጃ የለም", dis_retake: "የምስል ስህተት",
+            s_fever: "ትኩሳት", s_headache: "ራስ ምታት", s_fatigue: "ድካም", s_chills: "ብርድ ብርድ ማለት", s_cough: "ሳል", s_nausea: "ማቅለሽለሽ", s_vomiting: "ማስታወክ", s_diarrhea: "ተቅማጥ", s_muscle_pain: "የጡንቻ ህመም", s_joint_pain: "የመገጣጠሚያ ህመም", s_skin_rash: "የቆዳ ሽፍታ", s_sweating: "ማላብ", s_loss_appetite: "የምግብ ፍላጎት መቀነስ", s_dizziness: "ማዞር", s_sore_throat: "የጉሮሮ ህመም", s_chest_pain: "የደረት ህመም", s_abd_pain: "የሆድ ህመም", s_short_breath: "የመተንፈስ ችግር", s_weakness: "የሰውነት መዛል", s_nasal_cong: "የአፍንጫ መታፈን", s_weight_loss: "የክብደት መቀነስ",
+            h_malaria: "የወባ ታሪክ", h_hyper: "የደም ግፊት", h_t1d: "ዓይነት 1 ስኳር", h_t2d: "ዓይነት 2 ስኳር", h_asthma: "አስም", h_heart: "የልብ በሽታ", h_anemia: "የደም ማነስ", h_tb: "የሳንባ ነቀርሳ", h_hiv: "ኤች አይ ቪ / ኤድስ", h_surgery: "የቅርብ ጊዜ ቀዶ ጥገና", h_pneumonia: "የሳምባ ምች", h_allergies: "አለርጂ", h_cancer: "ካንሰር",
+            d1: "ከ 1 ቀን በታች", d2: "1–3 ቀናት", d3: "3–7 ቀናት", d4: "1–2 ሳምንታት", d5: "2–4 ሳምንታት", d6: "ከ 1 ወር በላይ"
+        },
+        ti: {
+            app_title: "ሓጋዚ ሓኪም", app_subtitle: "ናይ ኒውራል ምርመራ ስርዓት",
+            settings_title: "ቅጥዕታት", language_label: "ቋንቋ", theme_label: "ገጽታ",
+            light_mode: "ብሩህ ገጽታ ☀️", dark_mode: "ጸልማት ገጽታ 🌙", btn_save: "ዓቅብ",
+            about_title: "ብዛዕባ ኣፕሊኬሽን", app_name_label: "ስም ኣፕ:", app_name_val: "ሓጋዚ ሕክምና (AI)",
+            version_label: "ቨርሽን:", version_val: "2.0.1 (Neural Edge)",
+            purpose_label: "ዕላማ:", purpose_val: "ናይ ምልክታት ትንታነ መሳርሒ",
+            desc_label: "መግለጺ:", desc_val: "ብAI ዝሰርሕ ናይ ሕክምና ደገፍ።",
+            privacy_label: "ሕልዉና:", privacy_val: "ዝኾነ ሓበሬታ ናብ ደገ ኣይወጽእን።",
+            disclaimer_label: "መጠንቀቕታ:", disclaimer_val: "ናይ ሓቂ መርመራ ሕክምና ኣይኮነን። ንትምህርቲ ጥራሕ።",
+            step1_title: "መግለጺ ሕሙም", full_name: "ሙሉእ ስም", ph_name: "ስም", age: "ዕድመ", sex: "ጾታ", male: "ተባዕታይ", female: "ኣንስተይቲ", other: "ካሊእ",
+            step2_title: "ከባቢ", continent: "ክፍለ-ዓለም", cont_af: "ኣፍሪቃ", cont_as: "እስያ", cont_eu: "ኣውሮፓ", cont_na: "ሰሜን ኣሜሪካ", cont_sa: "ደቡብ ኣሜሪካ", cont_au: "ኣውስትራልያ",
+            loc_type: "ዓይነት ከባቢ", urban: "ከተማ", rural: "ገጠር", altitude: "ብራኸ", lowland: "ቆላ", highland: "ደጋ",
+            step3_title: "ምልክታት", ph_symp: "🔍 ምልክታት ድለ...", step4_title: "ናይ ሕክምና ታሪኽ", ph_hist: "🔍 ታሪኽ ድለ...",
+            step5_title: "ኣካላዊ መለክዒታት", temp: "ሙቐት (°C)", heartbeat: "ትርግታ ልቢ", bp: "ጸቕጢ ደም", oxygen: "ኦክስጅን (%)", weight: "ክብደት (kg)", height: "ቁመት (cm)", blood_sugar: "ሽኮር ደም", resp_rate: "ናህሪ ትንፋስ",
+            step6_title: "ናይ ላቦራቶሪ መርመራ", awaiting_sample: "ሳምፕል ይጽበ ኣሎ", camera: "ካሜራ", upload: "ጽዓን",
+            neural_diag: "ውጽኢት መርመራ", med_label: "መድሃኒታት", advice_label: "ምኽሪ ሕክምና", new_patient: "ሓዱሽ ሕሙም",
+            btn_back: "ተመለስ", btn_next: "ቀጻሊ", btn_analyze: "ተንትን", analyzing: "ትንታነ እናተገበረ", processing: "ዳታ እናተሰርሐ",
+            conf_level: "እርግጸኝነት", dur_label: "ንውሓት",
+            h_summary: "🩺 ሓጺር መግለጺ ኩነታት", h_now: "💊 ሕዚ ክትገብሮዎ ዝግባእ", h_help: "⚠️ መዓዝ ሓገዝ ክትደልዩ ከምዘለኩም", h_tips: "🌿 ሓፈሻዊ ናይ ጥዕና ምኽርታት",
+            dis_malaria: "ዓሶ", dis_tb: "ቲቢ", dis_typhoid: "ታይፎይድ", dis_anemia: "ዋሕዲ ደም", dis_hypo: "ትሑት ጸቕጢ ደም", dis_none: "ጸገም ኣይተረኽበን", dis_insuf: "እኹል ሓበሬታ የለን", dis_retake: "ጸገም ስእሊ",
+            s_fever: "ረስኒ", s_headache: "ሕማም ርእሲ", s_fatigue: "ድኻም", s_chills: "ቁሪ ቁሪ ምባል", s_cough: "ሰዓል", s_nausea: "ምግልባጥ", s_vomiting: "ምምላስ", s_diarrhea: "ውጽኣት", s_muscle_pain: "ሕማም ጭዋዳ", s_joint_pain: "ሕማም መገጣጠሚ", s_skin_rash: "ናይ ቆርበት ሽፍታ", s_sweating: "ረሃጽ", s_loss_appetite: "ድሌት መግቢ ምጥፋእ", s_dizziness: "ምጽዋር", s_sore_throat: "ሕማም ጎረሮ", s_chest_pain: "ሕማም ኣፍልቢ", s_abd_pain: "ሕማም ከብዲ", s_short_breath: "ጸገም ትንፋስ", s_weakness: "ምድኻም", s_nasal_cong: "ኣፍንጫ ምዕጻው", s_weight_loss: "ክብደት ምቅናስ",
+            h_malaria: "ታሪኽ ዓሶ", h_hyper: "ጸቕጢ ደም", h_t1d: "ዓይነት 1 ሽኮር", h_t2d: "ዓይነት 2 ሽኮር", h_asthma: "ኣስም", h_heart: "ሕማም ልቢ", h_anemia: "ዋሕዲ ደም", h_tb: "ቲቢ", h_hiv: "ኤች ኣይ ቪ / ኤድስ", h_surgery: "ናይ ቀረባ መጥባሕቲ", h_pneumonia: "ነድሪ ሳንቡእ", h_allergies: "ኣለርጂ", h_cancer: "ካንሰር",
+            d1: "ትሕቲ 1 መዓልቲ", d2: "1–3 መዓልቲ", d3: "3–7 መዓልቲ", d4: "1–2 ሰሙን", d5: "2–4 ሰሙን", d6: "ልዕሊ 1 ወርሒ"
+        }
+    };
+
+    const SYMPTOMS_DATA = [
+        {id:"s_fever",key:"fever"},{id:"s_headache",key:"headache"},{id:"s_fatigue",key:"fatigue"},{id:"s_chills",key:"chills"},{id:"s_cough",key:"cough"},{id:"s_nausea",key:"nausea"},{id:"s_vomiting",key:"vomiting"},{id:"s_diarrhea",key:"diarrhea"},{id:"s_muscle_pain",key:"muscle pain"},{id:"s_joint_pain",key:"joint pain"},{id:"s_skin_rash",key:"skin rash"},{id:"s_sweating",key:"sweating"},{id:"s_loss_appetite",key:"loss of appetite"},{id:"s_dizziness",key:"dizziness"},{id:"s_sore_throat",key:"sore throat"},{id:"s_chest_pain",key:"chest pain"},{id:"s_abd_pain",key:"abdominal pain"},{id:"s_short_breath",key:"shortness of breath"},{id:"s_weakness",key:"weakness"},{id:"s_nasal_cong",key:"nasal congestion"},{id:"s_weight_loss",key:"weight loss"}
+    ];
+    const HISTORY_DATA = [
+        {id:"h_malaria",key:"malaria history"},{id:"h_hyper",key:"hypertension"},{id:"h_t1d",key:"type 1 diabetes"},{id:"h_t2d",key:"type 2 diabetes"},{id:"h_asthma",key:"asthma"},{id:"h_heart",key:"heart disease"},{id:"h_anemia",key:"anemia"},{id:"h_tb",key:"tuberculosis"},{id:"h_hiv",key:"hiv/aids"},{id:"h_surgery",key:"recent surgery"},{id:"h_pneumonia",key:"pneumonia history"},{id:"h_allergies",key:"allergies"},{id:"h_cancer",key:"cancer history"}
+    ];
+
+    let currentResultDisease = null;
+    let currentResultStatus  = null;
+    let currentResultReasoning = null;
+
+    function renderDynamicLists(lang) {
+        const sympBox = document.getElementById('symp-box');
+        const histBox = document.getElementById('hist-box');
+        const selectedSymp = new Set([...sympBox.querySelectorAll('.selected')].map(c => c.dataset.key));
+        const selectedHist = new Set([...histBox.querySelectorAll('.selected')].map(c => c.dataset.key));
+
+        sympBox.innerHTML = '';
+        SYMPTOMS_DATA.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `selectable-card ${selectedSymp.has(item.key) ? 'selected' : ''}`;
+            card.dataset.key = item.key;
+            card.innerHTML = `
+                <div style="font-weight:700;">${TRANSLATIONS[lang][item.id]}</div>
+                <div class="duration-ui">
+                    <label>${TRANSLATIONS[lang].dur_label}</label>
+                    <select>
+                        <option>${TRANSLATIONS[lang].d1}</option><option>${TRANSLATIONS[lang].d2}</option>
+                        <option>${TRANSLATIONS[lang].d3}</option><option>${TRANSLATIONS[lang].d4}</option>
+                        <option>${TRANSLATIONS[lang].d5}</option><option>${TRANSLATIONS[lang].d6}</option>
+                    </select>
+                </div>`;
+            card.onclick = (e) => { if(e.target.tagName !== 'SELECT') card.classList.toggle('selected'); };
+            sympBox.appendChild(card);
+        });
+
+        histBox.innerHTML = '';
+        HISTORY_DATA.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `selectable-card ${selectedHist.has(item.key) ? 'selected' : ''}`;
+            card.dataset.key = item.key;
+            card.innerHTML = `<div style="font-weight:700;">${TRANSLATIONS[lang][item.id]}</div>`;
+            card.onclick = () => card.classList.toggle('selected');
+            histBox.appendChild(card);
+        });
+    }
+
+    function changeLanguage(lang) {
+        localStorage.setItem('app_lang', lang);
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (TRANSLATIONS[lang][key]) el.innerText = TRANSLATIONS[lang][key];
+        });
+        document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+            const key = el.getAttribute('data-i18n-ph');
+            if (TRANSLATIONS[lang][key]) el.placeholder = TRANSLATIONS[lang][key];
+        });
+        if (currentStep === 6) document.getElementById('nextBtn').innerText = TRANSLATIONS[lang].btn_analyze;
+        renderDynamicLists(lang);
+        if (currentResultDisease) {
+            updateAdviceUI(currentResultDisease, currentResultStatus, lang, currentResultReasoning);
+        }
+    }
+
+    function changeTheme(theme) {
+        localStorage.setItem('app_theme', theme);
+        if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        else document.documentElement.removeAttribute('data-theme');
+    }
+
+    function openSettings() {
+        document.getElementById('settings-modal').classList.add('show');
+        document.getElementById('about-expanded').style.display = 'none';
+    }
+    function closeSettings() { document.getElementById('settings-modal').classList.remove('show'); }
+
+    // FIX: toggleAbout was called from HTML but never defined
+    function toggleAbout() {
+        const el = document.getElementById('about-expanded');
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const savedLang  = localStorage.getItem('app_lang')  || 'en';
+        const savedTheme = localStorage.getItem('app_theme') || 'light';
+        document.getElementById('lang-select').value  = savedLang;
+        document.getElementById('theme-select').value = savedTheme;
+        changeLanguage(savedLang);
+        changeTheme(savedTheme);
+    });
+
+    // ── ADVICE DB ────────────────────────────────────────────────────
+    const ADVICE_DB = {
+        "Malaria":      { en:{sum:"Transmitted by mosquitoes, causes fever and weakness.",now:"Rest immediately. Drink safe water. Use basic fever-reducers.",help:"Clinic if severe vomiting or confusion occurs.",tips:"Use mosquito nets."},am:{sum:"በወባ ትንኝ የሚተላለፍ፤ ትኩሳት እና ድካም ያመጣል።",now:"እረፍት ያድርጉ። በቂ ውሃ ይጠጡ።",help:"ማስታወክ ወይም ግራ መጋባት ካለ ወደ ሐኪም ይሂዱ።",tips:"አጎበር ይጠቀሙ።"},ti:{sum:"ብጣንጡ ዝመሓላለፍ፣ ረስንን ድኻምን የስዕብ።",now:"ዕረፍቲ ግበሩ። ጽሩይ ማይ ስተዩ።",help:"ተደጋጋሚ ምምላስ እንተሃልዩ ናብ ሓኪም ኪዱ።",tips:"ኣጎበር ተጠቐሙ."} },
+        "Tuberculosis": { en:{sum:"Bacterial infection affecting lungs.",now:"Cover mouth when coughing. Rest well.",help:"Seek care if coughing blood.",tips:"Strictly follow antibiotic plans."},am:{sum:"ሳንባን የሚያጠቃ የባክቴሪያ በሽታ።",now:"ሲያስሉ አፍዎን ይሸፍኑ። እረፍት ያድርጉ።",help:"ደም የተቀላቀለበት ሳል ካለ በአስቸኳይ ሐኪም ያማክሩ።",tips:"የሐኪም ትእዛዝን በጥብቅ ይከተሉ።"},ti:{sum:"ንሳንቡእ ዘጥቅዕ ባክተርያ።",now:"ክትስዕሉ ከለኹም ኣፍኩም ሸፍኑ።",help:"ደም እንተሰዒልኩም ብህጹጽ ሓኪም ርኸቡ።",tips:"ትእዛዝ ሓኪም ብግቡእ ተኸተሉ."} },
+        "Typhoid":      { en:{sum:"Bacterial infection from unsafe food/water.",now:"Stay hydrated. Eat bland foods.",help:"Urgent care for severe stomach pain.",tips:"Ensure drinking water is safe."},am:{sum:"ከተበከለ ምግብ/ውሃ የሚመጣ በሽታ።",now:"በቂ ውሃ ይጠጡ። ቀላል ምግብ ይመገቡ።",help:"ከፍተኛ የሆድ ህመም ካለ ወደ ህክምና ይሂዱ።",tips:"የተጣራ ውሃ ብቻ ይጠጡ።"},ti:{sum:"ካብ ዝተበከለ መግቢ/ማይ ዝመጽእ ሕማም።",now:"ማይ ብዙሕ ስተዩ። ፈኲስ መግቢ ተመገቡ።",help:"ብርቱዕ ሕማም ከብዲ እንተሃልዩ ናብ ክሊኒክ ኪዱ።",tips:"ጽሩይ ማይ ጥራሕ ስተዩ."} },
+        "Anemia":       { en:{sum:"Lack of healthy red blood cells.",now:"Avoid sudden fast movements. Eat iron-rich foods.",help:"See doctor if fainting or chest pain occurs.",tips:"Vitamin C helps iron absorption."},am:{sum:"በቂ ቀይ የደም ሴል አለመኖር።",now:"በድንገት ከመነሳት ይቆጠቡ። በብረት ማዕድን የበለፀጉ ምግቦችን ይመገቡ።",help:"መሳት ወይም የደረት ህመም ካለ ሐኪም ያማክሩ።",tips:"ቫይታሚን ሲ ከብረት ማዕድን ጋር መውሰድ ይጠቅማል።"},ti:{sum:"ዋሕዲ ቀያሕቲ ዋህዮታት ደም።",now:"ብሃንደበት ካብ ምትንሳእ ተቖጠቡ።",help:"ምውዳቕ ወይ ሕማም ኣፍልቢ እንተሃልዩ ሓኪም ርኸቡ።",tips:"ቫይታሚን ሲ ምውሳድ ይጠቅም."} },
+        "Hypotension":  { en:{sum:"Lower than normal blood pressure.",now:"Drink water. Lie down and elevate legs.",help:"Emergency help if you lose consciousness.",tips:"Stay hydrated, don't skip meals."},am:{sum:"ከመደበኛ በታች የሆነ የደም ግፊት።",now:"ውሃ ይጠጡ። ጋደም ብለው እግርዎን ከፍ ያድርጉ።",help:"ራስን መሳት ካጋጠመ ፈጣን እርዳታ ያግኙ።",tips:"በቂ ውሃ ይጠጡ፤ ምግብ አያሳልፉ።"},ti:{sum:"ካብ ንቡር ንታሕቲ ዝኾነ ጸቕጢ ደም።",now:"ማይ ስተዩ። ደቂስኩም እግርኹም ኣልዕሉ።",help:"ርእስኹም እንተስሒትኩም ህጹጽ ረድኤት ደልዩ።",tips:"ብዙሕ ማይ ስተዩ፣ መግቢ ኣይተሕልፉ."} },
+        "Healthy":      { en:{sum:"No major clinical abnormalities detected.",now:"Continue normal routine.",help:"Consult a doctor if new symptoms appear.",tips:"Maintain a balanced lifestyle."},am:{sum:"ምንም አይነት ከባድ የጤና ችግር አልተገኘም።",now:"የዕለት ተዕለት እንቅስቃሴዎን ይቀጥሉ።",help:"አዲስ ምልክት ከታየ ሐኪም ያማክሩ።",tips:"ጤናማ አኗኗርን ይከተሉ።"},ti:{sum:"ዋላ ሓደ ከቢድ ናይ ጥዕና ጸገም ኣይተረኽበን።",now:"ስሩዕ ናብራኹም ቀጽሉ።",help:"ሓዱሽ ምልክት እንተተራእዩ ሓኪም ርኸቡ።",tips:"ጥዑይ ኣነባብራ ተኸተሉ."} },
+        "NO ABNORMALITIES DETECTED": { en:{sum:"No major abnormalities detected.",now:"Continue normal routine.",help:"Consult a doctor if new symptoms appear.",tips:"Maintain a balanced lifestyle."},am:{sum:"ምንም አይነት ከባድ የጤና ችግር አልተገኘም።",now:"የዕለት ተዕለት እንቅስቃሴዎን ይቀጥሉ።",help:"አዲስ ምልክት ከታየ ሐኪም ያማክሩ።",tips:"ጤናማ አኗኗርን ይከተሉ።"},ti:{sum:"ዋላ ሓደ ከቢድ ናይ ጥዕና ጸገም ኣይተረኽበን።",now:"ስሩዕ ናብራኹም ቀጽሉ።",help:"ሓዱሽ ምልክት እንተተራእዩ ሓኪም ርኸቡ።",tips:"ጥዑይ ኣነባብራ ተኸተሉ."} },
+        "INSUFFICIENT DATA": { en:{sum:"Not enough data to analyze reliably.",now:"Please provide more specific symptoms.",help:"Visit a doctor if you feel unwell.",tips:"Listen to your body."},am:{sum:"በቂ መረጃ አልተሰጠም።",now:"እባክዎ ትክክለኛ ምልክቶችን ያስገቡ።",help:"ህመም ከተሰማዎ ወደ ሐኪም ይሂዱ።",tips:"የጤናዎን ሁኔታ በቅርበት ይከታተሉ።"},ti:{sum:"እኹል ሓበሬታ ኣይተዋህበን።",now:"በጃኹም ትክክለኛ ምልክታት ኣእትዉ።",help:"ሕማም እንተተሰሚዑኩም ናብ ሓኪም ኪዱ።",tips:"ኩነታት ጥዕናኹም ተከታተሉ."} },
+        "RETAKE_IMAGE": { en:{sum:"Low quality or uncertain result. Please retake the image.",now:"Ensure good lighting.",help:"Try holding the camera steady.",tips:"Clear images produce better results."},am:{sum:"ዝቅተኛ ጥራት ወይም እርግጠኛ ያልሆነ ውጤት።",now:"ጥሩ ብርሃን መኖሩን ያረጋግጡ።",help:"ካሜራውን አረጋግጠው ይያዙ።",tips:"ግልጽ ምስሎች የተሻለ ውጤት ይሰጣሉ።"},ti:{sum:"ትሑት ጽሬት ወይ ዘየተረጋገጸ ውጽኢት።",now:"ጽቡቕ ብርሃን ኣረጋግጹ።",help:"ካሜራኹም ኣጽኒዕኹም ሓዙ።",tips:"ጹሩይ ስእሊ ዝበለጸ ውጽኢት ይህብ."} }
+    };
+
+    function updateAdviceUI(disease, status, lang, reasoning) {
+        currentResultDisease   = disease;
+        currentResultStatus    = status;
+        currentResultReasoning = reasoning;
+
+        const ui_d = {
+            "Malaria":"dis_malaria","Tuberculosis":"dis_tb","Typhoid":"dis_typhoid",
+            "Anemia":"dis_anemia","Hypotension":"dis_hypo",
+            "Healthy":"dis_none","NO ABNORMALITIES DETECTED":"dis_none",
+            "INSUFFICIENT DATA":"dis_insuf","RETAKE_IMAGE":"dis_retake"
+        };
+
+        let diseaseText = TRANSLATIONS[lang][ui_d[disease]] || disease;
+        document.getElementById('res-disease').innerText = diseaseText;
+
+        const adviceKey = ADVICE_DB[disease] ? disease : "INSUFFICIENT DATA";
+        const data = (ADVICE_DB[adviceKey] && ADVICE_DB[adviceKey][lang])
+                   ? ADVICE_DB[adviceKey][lang]
+                   : ADVICE_DB["INSUFFICIENT DATA"].en;
+        const t = TRANSLATIONS[lang];
+
+        document.getElementById('advice-container').innerHTML = `
+            <div class="human-advice">
+                <h4>${t.h_summary}</h4><p>${data.sum}</p>
+                <h4>${t.h_now}</h4><p>${data.now}</p>
+                <h4>${t.h_help}</h4><p>${data.help}</p>
+                <h4>${t.h_tips}</h4><p>${data.tips}</p>
+            </div>`;
+    }
+
+    const MODEL_URL = "./model/";
+    const TREATMENTS = {
+        "Malaria":     { drugs: "• Artemether-lumefantrine<br>• Paracetamol" },
+        "Tuberculosis":{ drugs: "• Isoniazid<br>• Rifampicin<br>• Pyrazinamide" },
+        "Anemia":      { drugs: "• Ferrous sulfate<br>• Folic acid" },
+        "Typhoid":     { drugs: "• Ciprofloxacin<br>• Azithromycin" },
+        "Hypotension": { drugs: "• ORS<br>• Fludrocortisone" },
+        "Healthy":     { drugs: "None needed — Stay healthy! 🟢" },
+        "INSUFFICIENT DATA":         { drugs: "N/A" },
+        "NO ABNORMALITIES DETECTED": { drugs: "None needed" },
+        "RETAKE_IMAGE": { drugs: "N/A" }
+    };
+
+    let model, webcam, currentStep = 1, useWebcam = false, uploadedFile = null;
+    let onnxSession = null;
+
+    // ── MODEL LOADING ────────────────────────────────────────────────
+    async function loadAI() {
+        try { model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json"); }
+        catch(e) { console.error("Image model load error:", e); }
+    }
+    loadAI();
+
+    async function loadOnnxModel() {
+        try {
+            if (typeof ort === 'undefined') { console.warn('[ONNX] ort not available'); return; }
+            const paths = ['./disease_model.onnx','./model.onnx','./model/model.onnx'];
+            for (const path of paths) {
+                try {
+                    onnxSession = await ort.InferenceSession.create(path);
+                    console.log('[ONNX] Loaded from:', path, '| Inputs:', onnxSession.inputNames);
+                    break;
+                } catch(pe) { console.warn('[ONNX] Path failed:', path, pe.message); }
+            }
+            if (!onnxSession) console.warn('[ONNX] All paths failed — image-only mode');
+        } catch(e) {
+            console.warn('[ONNX] Model load failed:', e);
+            onnxSession = null;
+        }
+    }
+    loadOnnxModel();
+
+    const ONNX_CLASS_MAP = [
+        "NO ABNORMALITIES DETECTED","Malaria","Tuberculosis","Anemia","Typhoid","Hypotension"
+    ];
+
+    // ── FEATURE COLLECTION ───────────────────────────────────────────
+    function collectInputFeatures() {
+        try {
+            const age        = parseFloat(document.getElementById('age').value) || 30;
+            const sexEl      = document.getElementById('sex');
+            const sexVal     = sexEl ? sexEl.selectedIndex : 0;
+            const continentEl= document.getElementById('continent');
+            const continentVal = continentEl ? continentEl.selectedIndex : 0;
+            const locEl      = document.getElementById('locType');
+            const locVal     = locEl ? locEl.selectedIndex : 0;
+            const altEl      = document.getElementById('alt');
+            const altVal     = altEl ? altEl.selectedIndex : 0;
+
+            const SYMP_KEYS = ['fever','headache','fatigue','chills','cough','nausea','vomiting','diarrhea','muscle pain','joint pain','skin rash','sweating','loss of appetite','dizziness','sore throat','chest pain','abdominal pain','shortness of breath','weakness','nasal congestion','weight loss'];
+            const sympCards = document.querySelectorAll('#symp-box .selectable-card');
+            const selSymp = {};
+            sympCards.forEach(c => { if (c.classList.contains('selected')) selSymp[c.dataset.key] = 1; });
+            const sympFeatures = SYMP_KEYS.map(k => selSymp[k] ? 1.0 : 0.0);
+
+            const HIST_KEYS = ['malaria history','hypertension','type 1 diabetes','type 2 diabetes','asthma','heart disease','anemia','tuberculosis','hiv/aids','recent surgery','pneumonia history','allergies','cancer history'];
+            const histCards = document.querySelectorAll('#hist-box .selectable-card');
+            const selHist = {};
+            histCards.forEach(c => { if (c.classList.contains('selected')) selHist[c.dataset.key] = 1; });
+            const histFeatures = HIST_KEYS.map(k => selHist[k] ? 1.0 : 0.0);
+
+            const tempVal   = parseFloat(document.getElementById('tempValue').value) || 36.6;
+            const p5Inputs  = document.querySelectorAll('#p5 input[type="number"]');
+            const hrVal     = p5Inputs[1] ? (parseFloat(p5Inputs[1].value) || 75)  : 75;
+            const o2Val     = p5Inputs[3] ? (parseFloat(p5Inputs[3].value) || 98)  : 98;
+
+            const features = [
+                age / 100.0, sexVal / 2.0, continentVal / 5.0, locVal, altVal,
+                ...sympFeatures, ...histFeatures,
+                tempVal / 50.0, hrVal / 200.0, o2Val / 100.0
+            ];
+            while (features.length < 42) features.push(0.0);
+            return features.slice(0, 42);
+        } catch(e) {
+            console.warn('[ONNX] Feature collection error:', e);
+            return new Array(42).fill(0.0);
+        }
+    }
+
+    // ── ONNX INFERENCE (FIX: removed double inference — session now runs once) ───
+    async function runOnnxInference(features) {
+        if (!onnxSession) return null;
+        try {
+            const inputName   = onnxSession.inputNames[0];
+            let inputFeatures = features;
+            let tensor        = new ort.Tensor('float32', new Float32Array(inputFeatures), [1, inputFeatures.length]);
+
+            let results;
+            try {
+                // FIX: run session once and keep the result (previously ran twice — test run was discarded)
+                results = await onnxSession.run({ [inputName]: tensor });
+            } catch(shapeErr) {
+                console.warn('[ONNX] Shape mismatch, trying 30-feature CSV format:', shapeErr.message);
+                const csvFeatures = window._lastCSVTensor || new Float32Array(30).fill(0);
+                inputFeatures = Array.from(csvFeatures);
+                tensor  = new ort.Tensor('float32', new Float32Array(inputFeatures), [1, inputFeatures.length]);
+                results = await onnxSession.run({ [inputName]: tensor });
+            }
+
+            const outputData = results[onnxSession.outputNames[0]].data;
+            let probs = Array.from(outputData);
+            const maxVal = Math.max(...probs);
+            const exps   = probs.map(v => Math.exp(v - maxVal));
+            const sumExp = exps.reduce((a,b) => a + b, 0);
+            probs = exps.map(v => v / sumExp);
+
+            const probMap = {};
+            ONNX_CLASS_MAP.forEach((label, i) => { if (i < probs.length) probMap[label] = probs[i]; });
+
+            let bestIdx = 0, bestProb = probs[0];
+            for (let i = 1; i < probs.length; i++) {
+                if (probs[i] > bestProb) { bestProb = probs[i]; bestIdx = i; }
+            }
+
+            return { disease: ONNX_CLASS_MAP[bestIdx] ?? "NO ABNORMALITIES DETECTED", confidence: bestProb, probMap };
+        } catch(e) {
+            console.warn('[ONNX] Inference error:', e);
+            return null;
+        }
+    }
+
+    // ── FUSION LOGIC ─────────────────────────────────────────────────
+    const IMAGE_DISEASES = ["Tuberculosis","Malaria","Anemia"];
+    const ONNX_DISEASES  = ["Malaria","Anemia","Typhoid","Hypotension","NO ABNORMALITIES DETECTED"];
+
+    function _classifyLevel(score) {
+        if (score >= 75) return "HIGH";
+        if (score >= 50) return "MEDIUM";
+        return "LOW";
+    }
+
+    function _buildRecommendation(level, prediction) {
+        const isHealthy = prediction === "Healthy" || prediction === "NO ABNORMALITIES DETECTED";
+        if (isHealthy) {
+            if (level === "HIGH")   return "✅ No significant disease indicators found. Maintain a healthy lifestyle and regular check-ups.";
+            if (level === "MEDIUM") return "🟡 Results lean healthy but are inconclusive. Monitor any new symptoms closely.";
+            return "⚠️ Low confidence result. Provide more clinical data or seek medical evaluation.";
+        }
+        if (level === "HIGH")   return `🔴 High-confidence indication of ${prediction}. Seek medical attention promptly.`;
+        if (level === "MEDIUM") return `🟠 Possible ${prediction} detected. Consult a healthcare provider soon.`;
+        return `⚠️ Inconclusive signal for ${prediction}. Additional clinical evaluation recommended.`;
+    }
+
+    function evaluateFusionLogic(onnxResult, imagePreds) {
+        const W_IMG  = 0.55;
+        const W_ONNX = 0.45;
+
+        const onnxAvailable = onnxResult !== null;
+        const onnxLabel = onnxAvailable ? onnxResult.disease    : "NO ABNORMALITIES DETECTED";
+        const onnxConf  = onnxAvailable ? onnxResult.confidence : 0;
+
+        const imgAvailable = !!(imagePreds && imagePreds.length > 0);
+        let imgLabel = "Healthy", imgConf = 0, imgPredMap = {};
+
+        if (imgAvailable) {
+            imagePreds.forEach(p => {
+                const cls = p.className.toLowerCase();
+                if      (cls.includes("malaria")      && !cls.includes("negative")) imgPredMap["Malaria"]      = (imgPredMap["Malaria"]      || 0) + p.probability;
+                else if ((cls.includes("tb") || cls.includes("tuberculosis")) && !cls.includes("negative"))    imgPredMap["Tuberculosis"]   = (imgPredMap["Tuberculosis"]  || 0) + p.probability;
+                else if (cls.includes("anemia")       && !cls.includes("negative")) imgPredMap["Anemia"]       = (imgPredMap["Anemia"]       || 0) + p.probability;
+                else                                                                imgPredMap["Healthy"]      = (imgPredMap["Healthy"]      || 0) + p.probability;
+            });
+            const topImgEntry = Object.entries(imgPredMap).reduce((a,b) => b[1]>a[1]?b:a, ['Healthy',0]);
+            imgLabel = topImgEntry[0];
+            imgConf  = topImgEntry[1];
+        }
+
+        const debug = {
+            onnx:  { label: onnxLabel, confidence: +(onnxConf*100).toFixed(1), available: onnxAvailable },
+            image: { label: imgLabel,  confidence: +(imgConf*100).toFixed(1),  available: imgAvailable  }
+        };
+
+        const mkResult = (pred, score01, src) => {
+            const pct   = Math.min(100, Math.max(0, +(score01*100).toFixed(1)));
+            const level = _classifyLevel(pct);
+            return { finalPrediction: pred, confidenceScore: pct, confidenceLevel: level, source: src, recommendation: _buildRecommendation(level, pred), debug };
+        };
+
+        if (!onnxAvailable && !imgAvailable) return { finalPrediction:"Healthy", confidenceScore:40, confidenceLevel:"LOW", source:"FUSED", recommendation:"⚠️ No model data available. Seek medical evaluation.", debug };
+        if (!onnxAvailable) return mkResult(imgLabel === "Healthy" ? "Healthy" : imgLabel, imgConf, "IMAGE");
+        if (!imgAvailable)  return mkResult(onnxLabel === "NO ABNORMALITIES DETECTED" ? "Healthy" : onnxLabel, onnxConf, "ONNX");
+
+        const NORM_ONNX = {"NO ABNORMALITIES DETECTED":"Healthy","Malaria":"Malaria","Anemia":"Anemia","Typhoid":"Typhoid","Hypotension":"Hypotension","Tuberculosis":"Tuberculosis"};
+        const finalLabels = ["Healthy","Tuberculosis","Malaria","Anemia","Typhoid","Hypotension"];
+        const fusedScores = {};
+
+        finalLabels.forEach(d => {
+            let imgS = 0;
+            if (d === "Healthy") imgS = imgPredMap["Healthy"] || (imgLabel === "Healthy" ? imgConf : 0);
+            else if (IMAGE_DISEASES.includes(d)) imgS = d === imgLabel ? imgConf : 0;
+
+            const onnxNorm = NORM_ONNX[onnxLabel] || "Healthy";
+            let onnxS = 0;
+            if (d === "Healthy") onnxS = (onnxNorm === "Healthy") ? onnxConf : (1 - onnxConf) * 0.3;
+            else if (ONNX_DISEASES.includes(d) || d === onnxNorm) onnxS = d === onnxNorm ? onnxConf : 0;
+
+            if (d === "Tuberculosis" && imgLabel === "Tuberculosis") {
+                fusedScores[d] = imgS * 0.80 + onnxS * 0.20;
+            } else if ((d === "Typhoid" || d === "Hypotension") && onnxNorm === d) {
+                fusedScores[d] = onnxS;
+            } else {
+                fusedScores[d] = imgS * W_IMG + onnxS * W_ONNX;
+            }
+        });
+
+        const topEntry = Object.entries(fusedScores).reduce((a,b) => b[1]>a[1]?b:a, ['Healthy',0]);
+        let finalPred  = topEntry[0];
+        let finalScore = topEntry[1];
+
+        if (onnxConf < 0.60 && imgConf < 0.60 && finalPred !== "Healthy") {
+            finalPred  = "Healthy";
+            finalScore = Math.max(onnxConf, imgConf) * 0.9;
+        }
+
+        const imgNorm   = imgLabel;
+        const onnxNorm2 = NORM_ONNX[onnxLabel] || "Healthy";
+        let src = "FUSED";
+        if (imgNorm === finalPred && onnxNorm2 === finalPred) {
+            finalScore = Math.min(1, finalScore * 1.10);
+        } else if (imgNorm === finalPred && !ONNX_DISEASES.includes(finalPred)) {
+            src = "IMAGE";
+        } else if (onnxNorm2 === finalPred && !IMAGE_DISEASES.includes(finalPred)) {
+            src = "ONNX";
+        }
+
+        const bothAgree  = (imgNorm === finalPred && onnxNorm2 === finalPred);
+        const top2Overlap = finalPred !== "Healthy" && (imgNorm === finalPred || onnxNorm2 === finalPred);
+        let level;
+        if      (bothAgree && finalScore >= 0.75)                           level = "HIGH";
+        else if ((top2Overlap && finalScore >= 0.50) || (finalScore >= 0.50 && finalScore < 0.75)) level = "MEDIUM";
+        else                                                                 level = "LOW";
+        if (finalPred === "Healthy" && finalScore >= 0.75) level = "HIGH";
+
+        const pct = Math.min(100, Math.max(0, +(finalScore * 100).toFixed(1)));
+        return { finalPrediction: finalPred, confidenceScore: pct, confidenceLevel: level, source: src, recommendation: _buildRecommendation(level, finalPred), debug };
+    }
+
+    // ── RENDER FUSION UI ─────────────────────────────────────────────
+    function renderFusionUI(fusionResult) {
+        const lang = localStorage.getItem('app_lang') || 'en';
+        const fusionContainer = document.getElementById('fusion-container');
+        fusionContainer.style.display = 'block';
+
+        const isHealthy = fusionResult.finalPrediction === "Healthy"
+                       || fusionResult.finalPrediction === "NO ABNORMALITIES DETECTED"
+                       || fusionResult.finalPrediction === "No strong disease detected";
+        const displayPrediction = isHealthy ? "Healthy" : fusionResult.finalPrediction;
+
+        const diseaseTitle = document.getElementById('res-disease');
+        diseaseTitle.innerText = displayPrediction;
+        if (isHealthy) diseaseTitle.classList.add('text-healthy');
+        else            diseaseTitle.classList.remove('text-healthy');
+
+        const lvlEl = document.getElementById('fusion-level');
+        lvlEl.className = `conf-level-badge ${fusionResult.confidenceLevel}`;
+        lvlEl.innerText = fusionResult.confidenceLevel + " CONFIDENCE";
+
+        const srcEl = document.getElementById('fusion-source');
+        srcEl.className = `source-badge SRC-${fusionResult.source}`;
+        srcEl.innerText = fusionResult.source;
+
+        document.getElementById('conf-score-display').innerText = `Confidence Score: ${fusionResult.confidenceScore}%`;
+
+        const bar = document.getElementById('fusion-bar');
+        bar.className = 'confidence-bar-fill';
+        let barWidth = "35%";
+        if      (fusionResult.confidenceLevel === "HIGH")   { barWidth = `${Math.min(100, fusionResult.confidenceScore)}%`; bar.classList.add('conf-high'); }
+        else if (fusionResult.confidenceLevel === "MEDIUM") { barWidth = `${Math.min(100, fusionResult.confidenceScore)}%`; bar.classList.add('conf-medium'); }
+        else                                                { barWidth = `${Math.min(60,  fusionResult.confidenceScore)}%`; bar.classList.add('conf-low'); }
+        setTimeout(() => bar.style.width = barWidth, 100);
+
+        const recBox = document.getElementById('recommendation-box');
+        recBox.style.display = 'block';
+        recBox.className = `recommendation-box rec-${fusionResult.confidenceLevel.toLowerCase()}`;
+        recBox.innerText = fusionResult.recommendation;
+
+        const breakdown = document.getElementById('prob-breakdown');
+        breakdown.style.display = 'block';
+        document.getElementById('breakdown-source-lbl').innerText = `SOURCE: ${fusionResult.source}`;
+
+        const onnxD = fusionResult.debug.onnx;
+        const imgD  = fusionResult.debug.image;
+        document.getElementById('prob-onnx-row').innerHTML = onnxD.available
+            ? _makeProbRow("ONNX",  onnxD.label === "NO ABNORMALITIES DETECTED" ? "Healthy" : onnxD.label, onnxD.confidence, '#1A237E', '#5C6BC0')
+            : `<div class="prob-unavail">ONNX model unavailable or failed</div>`;
+        document.getElementById('prob-image-row').innerHTML = imgD.available
+            ? _makeProbRow("IMAGE", imgD.label, imgD.confidence, '#00838F', '#4DD0E1')
+            : `<div class="prob-unavail">Image model unavailable — no sample provided</div>`;
+
+        document.getElementById('debug-toggle-btn').style.display = 'block';
+        document.getElementById('debug-panel').innerText = JSON.stringify({
+            finalPrediction: fusionResult.finalPrediction, confidenceScore: fusionResult.confidenceScore,
+            confidenceLevel: fusionResult.confidenceLevel, source: fusionResult.source,
+            recommendation:  fusionResult.recommendation,
+            debug: { onnx: { label: onnxD.label, confidence: onnxD.confidence }, image: { label: imgD.label, confidence: imgD.confidence } }
+        }, null, 2);
+
+        const mappedDisease = isHealthy ? "Healthy" : fusionResult.finalPrediction;
+        document.getElementById('drug-list').innerHTML = (TREATMENTS[mappedDisease] || TREATMENTS["INSUFFICIENT DATA"]).drugs;
+        updateAdviceUI(mappedDisease, '', lang, '');
+    }
+
+    function _makeProbRow(modelName, diseaseLabel, confidence, barColor, lightColor) {
+        const pct = Math.min(100, Math.max(0, confidence));
+        return `
+        <div class="prob-row">
+            <span class="prob-row-label" style="color:${barColor};">${modelName}</span>
+            <span class="prob-row-disease">${diseaseLabel}</span>
+            <div class="prob-row-bar-bg">
+                <div class="prob-row-bar-fill" style="width:${pct}%; background:${lightColor};"
+                     id="bar-${modelName.toLowerCase()}"></div>
+            </div>
+            <span class="prob-row-pct" style="color:${barColor};">${pct.toFixed(1)}%</span>
+        </div>`;
+    }
+
+    function toggleDebugPanel() {
+        const panel = document.getElementById('debug-panel');
+        const btn   = document.getElementById('debug-toggle-btn');
+        const isOpen = panel.style.display === 'block';
+        panel.style.display = isOpen ? 'none' : 'block';
+        btn.innerText = isOpen ? '🛠 Developer Debug' : '🛠 Hide Debug Panel';
+    }
+
+    // ── AI CLINICAL REASONING ────────────────────────────────────────
+    function _buildPatientContext() {
+        const name   = document.getElementById('name')?.value     || 'Unknown';
+        const age    = document.getElementById('age')?.value      || '?';
+        const sex    = document.getElementById('sex')?.value      || '?';
+        const cont   = document.getElementById('continent')?.value || '?';
+        const loc    = document.getElementById('locType')?.value   || '?';
+        const temp   = document.getElementById('tempValue')?.value || '?';
+        const syms   = [...document.querySelectorAll('#symp-box .selectable-card.selected')].map(c => c.dataset.key).join(', ') || 'None reported';
+        const hist   = [...document.querySelectorAll('#hist-box .selectable-card.selected')].map(c => c.dataset.key).join(', ') || 'None';
+        const hgb    = document.getElementById('csv_hemoglobin')?.value;
+        const gluc   = document.getElementById('csv_glucose')?.value;
+        const bmi    = document.getElementById('csv_bmi')?.value;
+        const fevDur = document.getElementById('csv_fever_duration_days')?.value;
+        const labs   = [];
+        if (hgb)    labs.push(`Hemoglobin ${hgb} g/dL`);
+        if (gluc)   labs.push(`Glucose ${gluc} mg/dL`);
+        if (bmi)    labs.push(`BMI ${bmi}`);
+        if (fevDur) labs.push(`Fever duration ${fevDur} days`);
+        return `Patient: ${name}, Age: ${age}, Sex: ${sex}, Location: ${cont} (${loc}), Temp: ${temp}°C. Symptoms: ${syms}. Medical history: ${hist}. ` + (labs.length ? `Lab values: ${labs.join(', ')}.` : '');
+    }
+
+    async function generateAIExplanation(fusionResult) {
+        const aiBox     = document.getElementById('ai-explanation-box');
+        const aiContent = document.getElementById('ai-explanation-content');
+        aiBox.style.display = 'block';
+
+        const onnxD = fusionResult.debug.onnx;
+        const imgD  = fusionResult.debug.image;
+        const patientCtx = _buildPatientContext();
+
+        const prompt = `You are a medical AI fusion system combining two predictive models for tropical/endemic disease detection.
+
+FUSION WEIGHTS: Image model weight = 0.55, ONNX model weight = 0.45
+
+MODEL OUTPUTS:
+- Image Model (TB, Malaria, Anemia coverage): predicted "${imgD.label}" at ${imgD.confidence.toFixed(1)}% confidence [${imgD.available ? 'ACTIVE' : 'UNAVAILABLE'}]
+- ONNX Model (Diabetes, Typhoid, Malaria, Anemia coverage): predicted "${onnxD.label}" at ${onnxD.confidence.toFixed(1)}% confidence [${onnxD.available ? 'ACTIVE' : 'UNAVAILABLE'}]
+
+FUSION RESULT:
+- Final Score: ${fusionResult.confidenceScore}%
+- Final Disease: ${fusionResult.finalPrediction}
+- Confidence Level: ${fusionResult.confidenceLevel}
+- Dominant Source: ${fusionResult.source}
+
+PATIENT CONTEXT: ${patientCtx}
+
+Respond in EXACTLY this format (no other text, no markdown):
+Disease: ${fusionResult.finalPrediction}
+Confidence: ${fusionResult.confidenceLevel}
+Explanation: [2-3 sentences explaining the diagnosis, referencing model agreement/disagreement, weights applied, clinical features, and next steps]`;
+
+        try {
+            const response = await fetch("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: "claude-sonnet-4-20250514",
+                    max_tokens: 1000,
+                    messages: [{ role: "user", content: prompt }]
+                })
+            });
+
+            if (!response.ok) throw new Error(`API ${response.status}`);
+            const data = await response.json();
+            const raw  = (data.content || []).map(b => b.text || '').join('').trim();
+
+            const diseaseMatch = raw.match(/^Disease:\s*(.+)$/m);
+            const confMatch    = raw.match(/^Confidence:\s*(.+)$/m);
+            const explMatch    = raw.match(/^Explanation:\s*([\s\S]+?)(?:\n[A-Z]|$)/m);
+
+            const diseaseTxt = diseaseMatch ? diseaseMatch[1].trim() : fusionResult.finalPrediction;
+            const confTxt    = confMatch    ? confMatch[1].trim()    : fusionResult.confidenceLevel;
+            const explTxt    = explMatch    ? explMatch[1].trim()    : raw.replace(/Disease:.+\nConfidence:.+\n/s,'').trim();
+
+            aiContent.innerHTML = `
+                <div class="ai-formatted">
+                    <div class="ai-row"><span class="ai-lbl">Disease</span><span class="ai-val" style="font-weight:800;font-size:15px;">${diseaseTxt}</span></div>
+                    <div class="ai-hr"></div>
+                    <div class="ai-row"><span class="ai-lbl">Confidence</span><span class="ai-val"><span class="conf-level-badge ${confTxt}" style="font-size:10px;">${confTxt}</span> &nbsp;${fusionResult.confidenceScore}%</span></div>
+                    <div class="ai-hr"></div>
+                    <div class="ai-row"><span class="ai-lbl">Explanation</span><span class="ai-val" style="font-size:13px;line-height:1.65;">${explTxt}</span></div>
+                </div>`;
+        } catch(err) {
+            console.warn('[Claude API] Request failed:', err);
+            aiContent.innerHTML = `
+                <div class="ai-formatted">
+                    <div class="ai-row"><span class="ai-lbl">Disease</span><span class="ai-val" style="font-weight:800;">${fusionResult.finalPrediction}</span></div>
+                    <div class="ai-hr"></div>
+                    <div class="ai-row"><span class="ai-lbl">Confidence</span><span class="ai-val"><span class="conf-level-badge ${fusionResult.confidenceLevel}" style="font-size:10px;">${fusionResult.confidenceLevel}</span></span></div>
+                    <div class="ai-hr"></div>
+                    <div class="ai-row"><span class="ai-lbl">Explanation</span><span class="ai-val" style="color:var(--text-color);font-size:12px;">${fusionResult.recommendation} (AI reasoning offline)</span></div>
+                </div>`;
+        }
+    }
+
+    // ── ANALYSIS SEQUENCE ────────────────────────────────────────────
+    async function startAnalysisSequence() {
+        // Collect CSV tensor before analysis
+        window._lastCSVTensor = collectCSVFeatures();
+        const { valid, errors } = validateCSVInputs();
+        if (!valid) console.warn('[CSV] Validation warnings:\n' + errors.join('\n'));
+
+        ['dot-image','dot-onnx'].forEach(id => {
+            document.getElementById(id).className = 'model-dot';
+        });
+        document.getElementById('analyze-overlay').style.display = 'flex';
+
+        let imagePreds = null;
+        if (model && (useWebcam || uploadedFile)) {
+            const imgElement = useWebcam ? webcam.canvas : uploadedFile;
+            try {
+                imagePreds = await model.predict(imgElement);
+                document.getElementById('dot-image').className = 'model-dot ok';
+            } catch(e) {
+                console.warn('[TM] Predict error:', e);
+                document.getElementById('dot-image').className = 'model-dot err';
+            }
+        } else {
+            document.getElementById('dot-image').className = 'model-dot err';
+        }
+
+        let onnxResult = null;
+        try {
+            const features = collectInputFeatures();
+            onnxResult = await runOnnxInference(features);
+            document.getElementById('dot-onnx').className = onnxResult ? 'model-dot ok' : 'model-dot err';
+        } catch(e) {
+            console.warn('[ONNX] Engine error:', e);
+            document.getElementById('dot-onnx').className = 'model-dot err';
+        }
+
+        setTimeout(() => {
+            const fusionResult = evaluateFusionLogic(onnxResult, imagePreds);
+            document.getElementById('analyze-overlay').style.display = 'none';
+            renderFusionUI(fusionResult);
+            generateAIExplanation(fusionResult);
+
+            document.getElementById('p6').classList.remove('active');
+            document.getElementById('pResult').classList.add('active');
+            currentStep = 7;
+
+            // FIX: hide Back/Next and show New Patient button on result page
+            document.getElementById('backBtn').style.display = 'none';
+            document.getElementById('nextBtn').style.display = 'none';
+            showNewPatientBtn();
+
+            setTimeout(() => {
+                const bImg  = document.getElementById('bar-image');
+                const bOnnx = document.getElementById('bar-onnx');
+                if (bImg)  bImg.style.transition  = 'width 0.8s ease';
+                if (bOnnx) bOnnx.style.transition = 'width 0.8s ease';
+            }, 200);
+        }, 2500);
+    }
+
+    // FIX: showNewPatientBtn / resetApp were referenced in translations but never implemented
+    function showNewPatientBtn() {
+        const lang = localStorage.getItem('app_lang') || 'en';
+        const footer = document.querySelector('footer');
+        // Remove any existing new-patient button before adding
+        const existing = document.getElementById('newPatientBtn');
+        if (existing) existing.remove();
+        const btn = document.createElement('button');
+        btn.id = 'newPatientBtn';
+        btn.className = 'btn btn-next';
+        btn.innerText = TRANSLATIONS[lang].new_patient || 'New Patient';
+        btn.onclick = resetApp;
+        footer.appendChild(btn);
+    }
+
+    function resetApp() {
+        const lang = localStorage.getItem('app_lang') || 'en';
+
+        // Hide result, return to page 1
+        document.getElementById('pResult').classList.remove('active');
+        document.getElementById('p1').classList.add('active');
+        currentStep = 1;
+
+        // Reset nav buttons
+        document.getElementById('backBtn').style.display = 'none';
+        document.getElementById('nextBtn').style.display = 'block';
+        document.getElementById('nextBtn').innerText = TRANSLATIONS[lang].btn_next;
+        const npBtn = document.getElementById('newPatientBtn');
+        if (npBtn) npBtn.remove();
+
+        // Clear patient inputs
+        document.getElementById('name').value = '';
+        document.getElementById('age').value  = '';
+
+        // Clear symptom + history selections
+        document.querySelectorAll('#symp-box .selectable-card.selected, #hist-box .selectable-card.selected')
+            .forEach(c => c.classList.remove('selected'));
+
+        // Clear CSV fields
+        document.querySelectorAll('.csv-input').forEach(el => el.value = '');
+
+        // Reset image preview
+        useWebcam   = false;
+        uploadedFile = null;
+        if (webcam) { try { webcam.stop(); } catch(e) {} webcam = null; }
+        document.getElementById('placeholder').style.display = 'flex';
+        document.getElementById('img-preview').style.display = 'none';
+        document.getElementById('webcam-view').style.display = 'none';
+        document.getElementById('img-preview').src = '';
+
+        // Reset result UI state
+        document.getElementById('res-disease').innerText = '--';
+        document.getElementById('fusion-container').style.display = 'none';
+        document.getElementById('recommendation-box').style.display = 'none';
+        document.getElementById('prob-breakdown').style.display = 'none';
+        document.getElementById('debug-toggle-btn').style.display = 'none';
+        document.getElementById('debug-panel').style.display = 'none';
+        document.getElementById('ai-explanation-box').style.display = 'none';
+        document.getElementById('drug-list').innerHTML = '';
+        document.getElementById('advice-container').innerHTML = '';
+        currentResultDisease   = null;
+        currentResultStatus    = null;
+        currentResultReasoning = null;
+    }
+
+    // ── CSV FEATURE COLLECTION ───────────────────────────────────────
+    function _safeNum(elementId, fallback = 0) {
+        const el = document.getElementById(elementId);
+        if (!el) return fallback;
+        const raw = el.value.trim();
+        if (raw === '') return fallback;
+        const parsed = parseFloat(raw);
+        return isNaN(parsed) ? fallback : parsed;
+    }
+
+    function _safeSelect(elementId, fallback = 0) {
+        const el = document.getElementById(elementId);
+        if (!el) return fallback;
+        const v = el.value;
+        if (v === '') return fallback;
+        const parsed = parseFloat(v);
+        return isNaN(parsed) ? fallback : parsed;
+    }
+
+    function collectCSVFeatures() {
+        try {
+            const age = _safeNum('age', 30);
+            const sexEl  = document.getElementById('sex');
+            const sexRaw = sexEl ? sexEl.value.toLowerCase() : 'male';
+            const sex    = sexRaw.includes('female') ? 1.0 : sexRaw.includes('other') ? 0.5 : 0.0;
+            const locEl  = document.getElementById('locType');
+            const location = locEl && locEl.value.toLowerCase().includes('rural') ? 1.0 : 0.0;
+
+            const rawValues = [
+                age, sex, location,
+                _safeNum('csv_hemoglobin',0), _safeNum('csv_wbc_count',0), _safeNum('csv_platelet_count',0),
+                _safeNum('csv_mch',0), _safeNum('csv_mchc',0), _safeNum('csv_mcv',0), _safeNum('csv_rdw_cv',0),
+                _safeNum('csv_neutrophils',0), _safeNum('csv_lymphocytes',0), _safeNum('csv_eosinophils',0), _safeNum('csv_hematocrit_pcv',0),
+                _safeNum('csv_fever_duration_days',0),
+                _safeSelect('csv_gastrointestinal_symptoms',0), _safeSelect('csv_neurological_symptoms',0),
+                _safeSelect('csv_skin_manifestations',0), _safeSelect('csv_complications',0),
+                _safeSelect('csv_blood_culture_result',0), _safeSelect('csv_widal_test',0), _safeSelect('csv_typhidot_test',0),
+                _safeNum('csv_pregnancies',0), _safeNum('csv_glucose',0), _safeNum('csv_blood_pressure',0),
+                _safeNum('csv_skin_thickness',0), _safeNum('csv_insulin',0), _safeNum('csv_bmi',0),
+                _safeNum('csv_diabetes_pedigree_function',0),
+                0 // disease (prediction target)
+            ];
+            const safe = rawValues.map(v => { const n = Number(v); return (!isFinite(n) || isNaN(n)) ? 0.0 : n; });
+            const tensorData = new Float32Array(safe);
+            window._lastCSVTensor = tensorData;
+            return tensorData;
+        } catch(e) {
+            console.warn('[CSV] collectCSVFeatures error:', e);
+            return new Float32Array(30).fill(0.0);
+        }
+    }
+
+    function validateCSVInputs() {
+        const errors = [];
+        const checks = [
+            {id:'csv_hemoglobin',label:'Hemoglobin',min:0,max:25},{id:'csv_wbc_count',label:'WBC Count',min:0,max:1e5},
+            {id:'csv_platelet_count',label:'Platelet Count',min:0,max:1e6},{id:'csv_mch',label:'MCH',min:0,max:50},
+            {id:'csv_mchc',label:'MCHC',min:0,max:40},{id:'csv_mcv',label:'MCV',min:0,max:150},
+            {id:'csv_rdw_cv',label:'RDW-CV',min:0,max:30},{id:'csv_neutrophils',label:'Neutrophils',min:0,max:100},
+            {id:'csv_lymphocytes',label:'Lymphocytes',min:0,max:100},{id:'csv_eosinophils',label:'Eosinophils',min:0,max:50},
+            {id:'csv_hematocrit_pcv',label:'Hematocrit/PCV',min:0,max:70},
+            {id:'csv_glucose',label:'Glucose',min:0,max:600},{id:'csv_blood_pressure',label:'Blood Pressure',min:0,max:200},
+            {id:'csv_bmi',label:'BMI',min:0,max:70},{id:'csv_diabetes_pedigree_function',label:'DPF',min:0,max:3}
+        ];
+        checks.forEach(({id,label,min,max}) => {
+            const el = document.getElementById(id);
+            if (!el || el.value.trim() === '') return;
+            const v = parseFloat(el.value);
+            if (isNaN(v)) errors.push(`${label}: must be a number`);
+            else if (v < min || v > max) errors.push(`${label}: value ${v} outside range (${min}–${max})`);
+        });
+        return { valid: errors.length === 0, errors };
+    }
+
+    // ── UTILITY ──────────────────────────────────────────────────────
+    function filterItems(searchId, containerId) {
+        const query = document.getElementById(searchId).value.toLowerCase();
+        const cards = document.getElementById(containerId).getElementsByClassName('selectable-card');
+        Array.from(cards).forEach(card => {
+            card.style.display = card.innerText.toLowerCase().includes(query) ? 'block' : 'none';
+        });
+    }
+
+    async function navigate(dir) {
+        const lang = localStorage.getItem('app_lang') || 'en';
+        if (currentStep === 1 && dir === 1 && !document.getElementById('name').value) {
+            return alert("Please enter patient name");
+        }
+        if (currentStep === 6 && dir === 1) { startAnalysisSequence(); return; }
+
+        const currentId = currentStep === 7 ? 'pResult' : `p${currentStep}`;
+        document.getElementById(currentId).classList.remove('active');
+        currentStep += dir;
+        document.getElementById(`p${currentStep}`).classList.add('active');
+
+        document.getElementById('backBtn').style.display = currentStep === 1 ? 'none' : 'block';
+        document.getElementById('nextBtn').innerText = currentStep === 6 ? TRANSLATIONS[lang].btn_analyze : TRANSLATIONS[lang].btn_next;
+    }
+
+    async function initWebcam() {
+        useWebcam = true;
+        document.getElementById('placeholder').style.display   = 'none';
+        document.getElementById('img-preview').style.display   = 'none';
+        document.getElementById('webcam-view').style.display   = 'block';
+        webcam = new tmImage.Webcam(400, 400, true);
+        await webcam.setup();
+        await webcam.play();
+        document.getElementById("webcam-view").appendChild(webcam.canvas);
+        const loop = async () => { if(useWebcam) { webcam.update(); requestAnimationFrame(loop); } };
+        loop();
+    }
+
+    function previewImage(input) {
+        if (input.files[0]) {
+            useWebcam = false;
+            if (webcam) { try { webcam.stop(); } catch(e) {} }
+            document.getElementById("placeholder").style.display = 'none';
+            document.getElementById("webcam-view").style.display = 'none';
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.getElementById('img-preview');
+                img.src = e.target.result;
+                img.style.display = 'block';
+                uploadedFile = img;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+</script>
+</body>
+</html>
